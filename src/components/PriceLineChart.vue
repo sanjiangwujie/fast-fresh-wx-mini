@@ -158,34 +158,24 @@ export default {
       }
 
       if (!dataToUse || dataToUse.length === 0) {
-        console.log('[价格折线图] 没有数据可显示');
         return;
       }
-      
-      console.log('[价格折线图] 使用数据:', props.useMockData ? '假数据' : '真实数据', '数据点数量:', dataToUse.length);
 
       // 延迟执行，确保DOM已渲染
       setTimeout(() => {
         const query = uni.createSelectorQuery().in(instance);
         query.select('.price-chart').boundingClientRect((rect: any) => {
           if (!rect || !rect.width || !rect.height) {
-            console.log('[价格折线图] 容器尺寸未就绪，重试...', rect);
             setTimeout(() => drawChart(), 300);
             return;
           }
-
-          console.log('[价格折线图] 容器尺寸:', rect.width, rect.height);
-          console.log('[价格折线图] 使用数据:', dataToUse.length, '个数据点');
 
           try {
             const canvasId = props.canvasId || 'priceChart';
             const ctx = uni.createCanvasContext(canvasId, instance);
             if (!ctx) {
-              console.error('[价格折线图] 无法创建Canvas上下文');
               return;
             }
-            
-            console.log('[价格折线图] Canvas上下文创建成功');
 
             // 生成日期范围
             const { dateKeys, displayLabels } = generateDateRange();
@@ -198,9 +188,7 @@ export default {
 
             // 计算价格范围（只计算有数据的点）
             const validPrices = prices.filter(p => p !== null) as number[];
-            console.log('[价格折线图] 有效价格数据:', validPrices);
             if (validPrices.length === 0) {
-              console.log('[价格折线图] 没有有效数据');
               return;
             }
 
@@ -226,10 +214,6 @@ export default {
             const padding = { top: 45, right: 40, bottom: 85, left: 60 };
             const chartWidth = containerWidth - padding.left - padding.right;
             const chartHeight = containerHeight - padding.top - padding.bottom;
-
-            console.log('[价格折线图] 画布尺寸:', containerWidth, containerHeight);
-            console.log('[价格折线图] 图表尺寸:', chartWidth, chartHeight);
-            console.log('[价格折线图] X轴标签数量:', displayLabels.length);
 
             // 清空画布
             ctx.clearRect(0, 0, containerWidth, containerHeight);
@@ -400,9 +384,6 @@ export default {
               // 检查坐标是否在画布范围内（给右侧留出一些边距）
               if (y < containerHeight - 10 && x <= containerWidth - 15) {
                 ctx.fillText(dateKey, x, y);
-                console.log(`[价格折线图] X轴标签 ${index}: ${dateKey} at (${x.toFixed(1)}, ${y.toFixed(1)})`);
-              } else {
-                console.warn(`[价格折线图] X轴标签 ${index} 坐标超出范围: x=${x.toFixed(1)}, y=${y.toFixed(1)}, 容器宽度=${containerWidth}, 高度=${containerHeight}`);
               }
             });
 
@@ -417,11 +398,9 @@ export default {
             ctx.setTextBaseline('top');
             ctx.fillText('单价', padding.left + chartWidth / 2 - 20, padding.top + chartHeight + 35);
 
-            ctx.draw(false, () => {
-              console.log('[价格折线图] 绘制完成');
-            });
+            ctx.draw(false);
           } catch (error) {
-            console.error('[价格折线图] 绘制失败:', error);
+            // 绘制失败，静默处理
           }
         }).exec();
       }, 500);
@@ -440,7 +419,6 @@ export default {
 
     // 组件挂载后绘制
     onMounted(() => {
-      console.log('[价格折线图] 组件已挂载');
       nextTick(() => {
         drawChart();
       });
@@ -448,7 +426,6 @@ export default {
 
     // uni-app 的 onReady 生命周期
     onReady(() => {
-      console.log('[价格折线图] 页面已就绪');
       setTimeout(() => {
         drawChart();
       }, 500);

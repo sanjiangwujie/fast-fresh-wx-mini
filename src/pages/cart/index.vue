@@ -15,8 +15,13 @@
           <view class="cart-item-checkbox" @click="handleToggleSelect(item, isManageMode)">
             <text class="checkbox-icon" :class="{ checked: isManageMode ? item.is_manage_selected : item.is_selected }">✓</text>
           </view>
-          <image class="cart-item-image" :src="item.product?.image_url || ''" mode="aspectFill" />
-          <view class="cart-item-info">
+          <image 
+            class="cart-item-image" 
+            :src="item.product?.image_url || ''" 
+            mode="aspectFill"
+            @click="handleGoToProductDetail(item)"
+          />
+          <view class="cart-item-info" @click="handleGoToProductDetail(item)">
             <text class="cart-item-name">{{ item.product?.name || "" }}</text>
             <view class="cart-item-price-row">
               <text class="cart-item-price">¥{{ item.product?.unit_price || 0 }}</text>
@@ -51,7 +56,7 @@
         <text class="footer-text">全选</text>
       </view>
       <view class="footer-info" v-if="!isManageMode">
-        <text class="footer-total">合计: ¥{{ totalPrice }}</text>
+        <text class="footer-total">合计: ¥{{ totalPrice.toFixed(2) }}</text>
       </view>
       <view class="footer-info" v-else>
         <text class="footer-total">已选择: {{ manageSelectedCount }}件</text>
@@ -326,6 +331,20 @@ export default {
       });
     };
 
+    // 跳转到商品详情页
+    const handleGoToProductDetail = (item: Carts) => {
+      if (!item.product?.id) {
+        uni.showToast({
+          title: "商品信息错误",
+          icon: "none",
+        });
+        return;
+      }
+      uni.navigateTo({
+        url: `/pages/product/detail?id=${item.product.id}`,
+      });
+    };
+
     // 去逛逛
     const handleGoShopping = () => {
       uni.switchTab({
@@ -364,6 +383,7 @@ export default {
       handleBatchDelete,
       handleCheckout,
       handleGoShopping,
+      handleGoToProductDetail,
     };
   },
 };
@@ -400,14 +420,14 @@ export default {
 
 .header-manage-btn {
   padding: 12rpx 32rpx;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background-color: #f5f5f5;
+  border: 1rpx solid #e0e0e0;
   border-radius: 40rpx;
-  box-shadow: 0 4rpx 12rpx rgba(102, 126, 234, 0.3);
 }
 
 .header-manage-text {
   font-size: 28rpx;
-  color: #fff;
+  color: #666;
   font-weight: 500;
 }
 
@@ -459,6 +479,7 @@ export default {
   border-radius: 12rpx;
   background-color: #f5f5f5;
   margin-right: 20rpx;
+  flex-shrink: 0;
 }
 
 .cart-item-info {
@@ -467,6 +488,7 @@ export default {
   flex-direction: column;
   justify-content: space-between;
   min-height: 160rpx;
+  padding-right: 20rpx;
 }
 
 .cart-item-name {

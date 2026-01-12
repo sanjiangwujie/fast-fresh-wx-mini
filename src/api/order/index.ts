@@ -4,11 +4,10 @@ import type { Orders, Orders_Order_By, Carts } from "@/types/graphql";
 interface DeliveryAddress {
   receiver_name: string;
   receiver_phone: string;
-  province: string;
-  city: string;
-  district: string;
   detail_address: string;
-  postal_code?: string;
+  receiver_province?: string;
+  receiver_city?: string;
+  receiver_district?: string;
 }
 
 interface CreateOrderParams {
@@ -116,7 +115,12 @@ export const getOrderById = async (orderId: string | number): Promise<Orders | n
         actual_amount
         remark
         payment_voucher_url
-        delivery_address
+        receiver_name
+        receiver_phone
+        receiver_address
+        receiver_province
+        receiver_city
+        receiver_district
         admin_remark
         abnormal_remark
         is_abnormal
@@ -181,7 +185,12 @@ export const createOrder = async (params: CreateOrderParams): Promise<Orders | n
       $discount_amount: numeric!
       $actual_amount: numeric!
       $remark: String
-      $delivery_address: jsonb!
+      $receiver_name: String!
+      $receiver_phone: String!
+      $receiver_address: String!
+      $receiver_province: String
+      $receiver_city: String
+      $receiver_district: String
       $order_products: [order_products_insert_input!]!
     ) {
       insert_orders_one(
@@ -194,7 +203,12 @@ export const createOrder = async (params: CreateOrderParams): Promise<Orders | n
           discount_amount: $discount_amount
           actual_amount: $actual_amount
           remark: $remark
-          delivery_address: $delivery_address
+          receiver_name: $receiver_name
+          receiver_phone: $receiver_phone
+          receiver_address: $receiver_address
+          receiver_province: $receiver_province
+          receiver_city: $receiver_city
+          receiver_district: $receiver_district
           is_deleted: false
           is_abnormal: false
           order_products: { data: $order_products }
@@ -208,7 +222,12 @@ export const createOrder = async (params: CreateOrderParams): Promise<Orders | n
         freight_amount
         actual_amount
         remark
-        delivery_address
+        receiver_name
+        receiver_phone
+        receiver_address
+        receiver_province
+        receiver_city
+        receiver_district
         created_at
         updated_at
         order_products {
@@ -233,10 +252,72 @@ export const createOrder = async (params: CreateOrderParams): Promise<Orders | n
       discount_amount: discountAmount,
       actual_amount: actualAmount,
       remark: remark || null,
-      delivery_address: deliveryAddress as any,
+      receiver_name: deliveryAddress.receiver_name,
+      receiver_phone: deliveryAddress.receiver_phone,
+      receiver_address: deliveryAddress.detail_address,
+      receiver_province: deliveryAddress.receiver_province || null,
+      receiver_city: deliveryAddress.receiver_city || null,
+      receiver_district: deliveryAddress.receiver_district || null,
       order_products: orderProducts,
     },
   });
 
   return result.insert_orders_one || null;
+};
+
+/**
+ * 更新订单付款截图
+ * @param orderId 订单ID
+ * @param paymentVoucherUrl 付款截图URL（可选）
+ * @returns 更新后的订单
+ */
+export const updateOrderPaymentVoucher = async (
+  orderId: string | number,
+  paymentVoucherUrl?: string | null
+): Promise<Orders | null> => {
+  const mutation = `
+    mutation UpdateOrderPaymentVoucher($id: bigint!, $payment_voucher_url: String) {
+      update_orders_by_pk(
+        pk_columns: { id: $id }
+        _set: { payment_voucher_url: $payment_voucher_url, payment_status: "paid" }
+      ) {
+        id
+        order_status
+        payment_status
+        payment_voucher_url
+        total_amount
+        discount_amount
+        freight_amount
+        actual_amount
+        remark
+        receiver_name
+        receiver_phone
+        receiver_address
+        receiver_province
+        receiver_city
+        receiver_district
+        created_at
+        updated_at
+        order_products {
+          id
+          product_name
+          product_image_url
+          product_unit
+          quantity
+          unit_price
+          total_price
+        }
+      }
+    }
+  `;
+
+  const result = await client.execute<{ update_orders_by_pk: Orders | null }>({
+    query: mutation,
+    variables: {
+      id: Number(orderId),
+      payment_voucher_url: paymentVoucherUrl || null,
+    },
+  });
+
+  return result.update_orders_by_pk || null;
 };

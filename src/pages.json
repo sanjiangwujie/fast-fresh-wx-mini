@@ -52,6 +52,18 @@
 			"style": {
 				"navigationBarTitleText": "搜索"
 			}
+		},
+		{
+			"path": "pages/order-payment/index",
+			"style": {
+				"navigationBarTitleText": "订单结算"
+			}
+		},
+		{
+			"path": "pages/order-share/index",
+			"style": {
+				"navigationBarTitleText": "订单详情"
+			}
 		}
 	],
 	"subPackages": [

@@ -23,9 +23,19 @@
         <!-- 订单头部 -->
         <view class="order-header">
           <text class="order-number">订单号: {{ order.id }}</text>
-          <text class="order-status" :class="getStatusClass(order.order_status)">
-            {{ getStatusText(order.order_status) }}
-          </text>
+          <view class="status-container">
+            <text class="order-status" :class="getStatusClass(order.order_status)">
+              {{ getStatusText(order.order_status, order.payment_status) }}
+            </text>
+            <!-- 当订单状态为pending时，显示支付状态 -->
+            <text 
+              v-if="order.order_status === 'pending'" 
+              class="payment-status" 
+              :class="getPaymentStatusClass(order.payment_status)"
+            >
+              {{ getPaymentStatusText(order.payment_status) }}
+            </text>
+          </view>
         </view>
 
         <!-- 订单商品列表 -->
@@ -39,13 +49,13 @@
             <view class="product-info">
               <text class="product-name">{{ product.product_name || "" }}</text>
               <view class="product-spec">
-                <text class="product-price">¥{{ product.unit_price || 0 }}</text>
+                <text class="product-price">¥{{ formatPrice(product.unit_price || 0) }}</text>
                 <text class="product-unit" v-if="product.product_unit">/{{ product.product_unit }}</text>
                 <text class="product-quantity"> × {{ product.quantity || 0 }}</text>
               </view>
             </view>
             <view class="product-total">
-              <text class="product-total-price">¥{{ product.total_price || 0 }}</text>
+              <text class="product-total-price">¥{{ formatPrice(product.total_price || 0) }}</text>
             </view>
           </view>
         </view>
@@ -55,7 +65,7 @@
           <text class="order-time">{{ formatTime(order.created_at) }}</text>
           <view class="order-total">
             <text class="order-total-label">合计:</text>
-            <text class="order-total-price">¥{{ order.actual_amount || 0 }}</text>
+            <text class="order-total-price">¥{{ formatPrice(order.actual_amount || 0) }}</text>
           </view>
         </view>
       </view>
@@ -93,10 +103,9 @@ export default {
     const pageSize = 20;
     const selectedStatus = ref<string | null>(null);
 
-    // 状态标签
+    // 状态标签（只保留4种订单状态）
     const statusTabs = [
       { label: "全部", value: null },
-      { label: "待支付", value: "pending_payment" },
       { label: "待确认", value: "pending" },
       { label: "已确认", value: "confirmed" },
       { label: "已完成", value: "completed" },
@@ -104,14 +113,45 @@ export default {
     ];
 
     // 获取状态文本
-    const getStatusText = (status: string | null | undefined) => {
+    const getStatusText = (orderStatus: string | null | undefined, paymentStatus?: string | null | undefined) => {
       const statusMap: Record<string, string> = {
         pending: "待确认",
         confirmed: "已确认",
         cancelled: "已取消",
         completed: "已完成",
       };
-      return statusMap[status || ""] || "未知";
+      return statusMap[orderStatus || ""] || "未知";
+    };
+
+    // 获取支付状态文本
+    const getPaymentStatusText = (status: string | null | undefined) => {
+      const statusMap: Record<string, string> = {
+        pending: "待支付",
+        paid: "已支付",
+        submitted: "已提交",
+        approved: "审核通过",
+        rejected: "审核拒绝",
+      };
+      return statusMap[status || ""] || "";
+    };
+
+    // 获取支付状态样式类
+    const getPaymentStatusClass = (status: string | null | undefined) => {
+      const statusClassMap: Record<string, string> = {
+        pending: "payment-pending",
+        paid: "payment-paid",
+        submitted: "payment-submitted",
+        approved: "payment-approved",
+        rejected: "payment-rejected",
+      };
+      return statusClassMap[status || ""] || "";
+    };
+
+    // 格式化价格，保留2位小数
+    const formatPrice = (price: number | string): string => {
+      const numPrice = typeof price === "string" ? parseFloat(price) : price;
+      if (isNaN(numPrice)) return "0.00";
+      return numPrice.toFixed(2);
     };
 
     // 获取状态样式类
@@ -190,10 +230,9 @@ export default {
 
     // 处理订单点击
     const handleOrderClick = (order: Orders) => {
-      // TODO: 跳转到订单详情页
-      uni.showToast({
-        title: `订单 ${order.id}`,
-        icon: "none",
+      // 跳转到订单结算页（订单详情页）
+      uni.navigateTo({
+        url: `/pages/order-payment/index?id=${order.id}`,
       });
     };
 
@@ -228,6 +267,9 @@ export default {
       statusTabs,
       getStatusText,
       getStatusClass,
+      getPaymentStatusText,
+      getPaymentStatusClass,
+      formatPrice,
       formatTime,
       handleStatusClick,
       handleOrderClick,
@@ -311,10 +353,47 @@ export default {
   color: #666;
 }
 
+.status-container {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
 .order-status {
   font-size: 26rpx;
   padding: 4rpx 16rpx;
   border-radius: 8rpx;
+}
+
+.payment-status {
+  font-size: 24rpx;
+  padding: 4rpx 12rpx;
+  border-radius: 6rpx;
+}
+
+.payment-pending {
+  color: #ff9500;
+  background-color: #fff4e6;
+}
+
+.payment-paid {
+  color: #3cc51f;
+  background-color: #e8f5e9;
+}
+
+.payment-submitted {
+  color: #1890ff;
+  background-color: #e6f7ff;
+}
+
+.payment-approved {
+  color: #3cc51f;
+  background-color: #e8f5e9;
+}
+
+.payment-rejected {
+  color: #ff3b30;
+  background-color: #ffe6e6;
 }
 
 .status-pending {

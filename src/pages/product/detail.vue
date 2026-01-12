@@ -18,6 +18,14 @@
           @change="handleSwiperChange"
         >
           <swiper-item v-for="(media, index) in productMedia" :key="media.id || index">
+            <!-- 媒体分类标签 -->
+            <view 
+              class="media-category-badge" 
+              :class="{ 'badge-up': media.type === 'video' }"
+              v-if="media.mediaCategory"
+            >
+              <text class="category-text">{{ getMediaCategoryText(media.mediaCategory) }}</text>
+            </view>
             <!-- 图片 -->
             <image 
               v-if="media.type === 'image'" 
@@ -26,23 +34,45 @@
               mode="aspectFill" 
             />
             <!-- 视频 -->
-            <view v-else-if="media.type === 'video'" class="video-wrapper">
+            <view 
+              v-else-if="media.type === 'video'" 
+              class="video-wrapper"
+              @click="handleVideoWrapperClick(index)"
+            >
               <video
                 :id="`video-${index}`"
                 class="product-video"
                 :src="media.url"
                 :poster="media.poster"
                 :controls="currentVideoIndex === index"
-                :show-center-play-btn="true"
+                :show-center-play-btn="currentVideoIndex !== index || !isVideoPlaying"
                 :enable-play-gesture="true"
-                :show-play-btn="true"
-                object-fit="cover"
+                :show-play-btn="currentVideoIndex !== index || !isVideoPlaying"
+                :enable-fullscreen="true"
+                :show-fullscreen-btn="currentVideoIndex === index"
+                object-fit="contain"
                 :autoplay="false"
                 @play="handleVideoPlay(index)"
                 @pause="handleVideoPause(index)"
                 @ended="handleVideoEnded(index)"
+                @error="handleVideoError(index)"
               ></video>
-              <view class="video-play-overlay" v-if="currentVideoIndex !== index || !isVideoPlaying" @click="handleVideoClick(index)">
+              <!-- 视频加载失败提示 -->
+              <view 
+                v-if="videoErrors.has(index)"
+                class="video-error-overlay"
+              >
+                <view class="error-content">
+                  <text class="error-icon">⚠️</text>
+                  <text class="error-text">视频加载失败</text>
+                </view>
+              </view>
+              <!-- 播放按钮覆盖层：只在未播放或不是当前视频时显示，且视频未加载失败 -->
+              <view 
+                v-else-if="!(currentVideoIndex === index && isVideoPlaying)"
+                class="video-play-overlay" 
+                @click.stop="handleVideoClick(index)"
+              >
                 <view class="play-button">
                   <text class="play-icon">▶</text>
                 </view>
@@ -50,7 +80,11 @@
             </view>
           </swiper-item>
         </swiper>
-        <view class="image-indicator" v-if="productMedia.length > 1">
+        <view 
+          class="image-indicator" 
+          :class="{ 'indicator-up': isCurrentMediaVideo }"
+          v-if="productMedia.length > 1"
+        >
           <text>{{ currentImageIndex + 1 }}/{{ productMedia.length }}</text>
         </view>
       </view>
@@ -61,13 +95,14 @@
           <view class="price-left">
             <text class="product-price">{{ product.unit_price || 0 }}</text>
             <text class="product-unit" v-if="product.unit">元/{{ product.unit }}</text>
-            <text class="product-grade" v-if="productGrade">一级</text>
+            <text class="product-grade" v-if="mediaTypeLabel">{{ mediaTypeLabel }}</text>
           </view>
           <view class="price-right">
             <text class="product-stock">剩余: {{ product.unit_stock || 0 }}{{ product.unit || "件" }}</text>
-            <view class="share-icon" @click="handleShare">
+            <button class="share-button" open-type="share">
+              <text class="share-icon-symbol">↗</text>
               <text class="share-text">分享</text>
-            </view>
+            </button>
           </view>
         </view>
         <view class="product-name-row">
@@ -78,10 +113,6 @@
       <!-- 产品详细指标 -->
       <view class="product-metrics-section" v-if="hasMetrics">
         <view class="metrics-grid">
-          <view class="metric-item" v-if="calculatedNetPrice && retailUnit">
-            <text class="metric-label">净果价</text>
-            <text class="metric-value">{{ calculatedNetPrice }}元/{{ retailUnit }}</text>
-          </view>
           <view class="metric-item" v-if="(product as any).gross_weight && retailUnit">
             <text class="metric-label">毛重</text>
             <text class="metric-value">{{ (product as any).gross_weight }}{{ retailUnit }}</text>
@@ -89,6 +120,10 @@
           <view class="metric-item" v-if="(product as any).net_weight && retailUnit">
             <text class="metric-label">净重</text>
             <text class="metric-value">{{ (product as any).net_weight }}{{ retailUnit }}</text>
+          </view>
+          <view class="metric-item" v-if="calculatedNetPrice && retailUnit">
+            <text class="metric-label">净果价</text>
+            <text class="metric-value net-price-value">{{ calculatedNetPrice }}元/{{ retailUnit }}</text>
           </view>
         </view>
       </view>
@@ -252,14 +287,17 @@
       <view class="bottom-bar">
         <view class="bottom-icons">
           <view class="icon-item" @click="handleGoStore">
-            <view class="icon-button">
-              <image class="icon-image" src="/static/tabbar/home.png" mode="aspectFit" />
+            <view class="icon-button icon-button-store">
+              <image class="icon-image" src="/static/product/product-home.png" mode="aspectFit" />
             </view>
             <text class="icon-text">店铺</text>
           </view>
           <view class="icon-item" @click="handleGoCart">
-            <view class="icon-button">
-              <image class="icon-image" src="/static/tabbar/cart.png" mode="aspectFit" />
+            <view class="icon-button icon-button-cart">
+              <image class="icon-image" src="/static/product/product-cart.png" mode="aspectFit" />
+              <view class="cart-badge" v-if="cartItemCount > 0">
+                <text class="cart-badge-text">{{ cartItemCount }}</text>
+              </view>
             </view>
             <text class="icon-text">购物车</text>
           </view>
@@ -273,8 +311,8 @@
 </template>
 
 <script lang="ts">
-import { ref, computed } from "vue";
-import { onLoad } from "@dcloudio/uni-app";
+import { ref, computed, nextTick } from "vue";
+import { onLoad, onShareAppMessage } from "@dcloudio/uni-app";
 import { 
   getProductById, 
   getProductPriceForecast, 
@@ -282,7 +320,7 @@ import {
   type PriceForecast,
   type PriceHistoryItem
 } from "@/api/product";
-import { addToCart } from "@/api/cart";
+import { addToCart, getCarts } from "@/api/cart";
 import type { Products } from "@/types/graphql";
 import PriceLineChart, { type PriceDataPoint } from "@/components/PriceLineChart.vue";
 
@@ -292,48 +330,49 @@ export default {
   },
   setup() {
     const product = ref<Products | null>(null);
+    const productId = ref<string | number>("");
     const loading = ref(false);
     const currentImageIndex = ref(0);
     const currentVideoIndex = ref(-1);
     const isVideoPlaying = ref(false);
+    const videoErrors = ref<Set<number>>(new Set()); // 记录加载失败的视频索引
     const priceForecast = ref<PriceForecast | null>(null);
     const forecastLoading = ref(false);
     const priceHistory = ref<PriceHistoryItem[]>([]);
     const historyLoading = ref(false);
+    const cartItemCount = ref(0);
 
     interface MediaItem {
       id: string | number;
       type: "image" | "video";
       url: string;
       poster?: string;
+      mediaCategory?: string; // 媒体分类：picking/packing/loading/departure
     }
 
-    // 产品媒体列表（包含主图和所有媒体文件：图片和视频）
+    // 产品媒体列表（优先显示批次媒体文件，如果没有则显示主图）
     const productMedia = computed(() => {
       const mediaList: MediaItem[] = [];
       
-      // 添加主图
-      if (product.value?.image_url) {
-        mediaList.push({
-          id: "main-image",
-          type: "image",
-          url: product.value.image_url,
-        });
-      }
-      
-      // 添加批次媒体文件（图片和视频）
-      if (product.value?.batch?.batch_media_files) {
-        product.value.batch.batch_media_files.forEach((media) => {
-          if (media.file_url) {
-            const existingMedia = mediaList.find((m) => m.url === media.file_url);
+      // 优先添加批次媒体文件（图片和视频）
+      if (product.value?.batch?.batch_media_files && Array.isArray(product.value.batch.batch_media_files) && product.value.batch.batch_media_files.length > 0) {
+        product.value.batch.batch_media_files.forEach((media: any) => {
+          const fileUrl = media.file_url || media.fileUrl;
+          const mediaCategory = media.media_category || media.mediaCategory;
+          const mediaId = media.id;
+          
+          if (fileUrl && mediaId) {
+            // 使用 id 而不是 url 来去重，因为不同媒体文件可能有相同的 URL
+            const existingMedia = mediaList.find((m) => m.id === mediaId);
             if (!existingMedia) {
               const mediaItem: MediaItem = {
-                id: media.id,
-                type: media.file_type === "image" ? "image" : "video",
-                url: media.file_url,
+                id: mediaId,
+                type: (media.file_type === "image" || media.fileType === "image") ? "image" : "video",
+                url: fileUrl,
+                mediaCategory: mediaCategory || undefined, // 添加媒体分类
               };
               // 如果是视频，添加封面图
-              if (media.file_type === "video" && product.value?.image_url) {
+              if (mediaItem.type === "video" && product.value?.image_url) {
                 mediaItem.poster = product.value.image_url;
               }
               mediaList.push(mediaItem);
@@ -342,12 +381,60 @@ export default {
         });
       }
       
+      // 如果没有批次媒体文件，则添加主图作为后备
+      if (mediaList.length === 0 && product.value?.image_url) {
+        mediaList.push({
+          id: "main-image",
+          type: "image",
+          url: product.value.image_url,
+        });
+      }
+      
       return mediaList.length > 0 ? mediaList : [{ id: "placeholder", type: "image" as const, url: "" }];
     });
 
-    // 产品等级（示例，实际应从数据库获取）
-    const productGrade = computed(() => {
-      return "一级"; // 可以根据产品数据返回实际等级
+    // 媒体类型标签：根据 batch_media_files 中是否有视频或图片显示相应标签
+    const mediaTypeLabel = computed(() => {
+      // 直接检查 batch_media_files
+      if (!product.value?.batch?.batch_media_files || !Array.isArray(product.value.batch.batch_media_files) || product.value.batch.batch_media_files.length === 0) {
+        return null;
+      }
+      
+      const batchMediaFiles = product.value.batch.batch_media_files;
+      
+      // 检查是否有视频
+      const hasVideo = batchMediaFiles.some((media: any) => {
+        const fileType = media.file_type || media.fileType;
+        const fileUrl = media.file_url || media.fileUrl;
+        return (fileType === "video") && fileUrl;
+      });
+      
+      if (hasVideo) {
+        return "实拍视频";
+      }
+      
+      // 检查是否有图片
+      const hasImage = batchMediaFiles.some((media: any) => {
+        const fileType = media.file_type || media.fileType;
+        const fileUrl = media.file_url || media.fileUrl;
+        return (fileType === "image") && fileUrl;
+      });
+      
+      if (hasImage) {
+        return "实拍图片";
+      }
+      
+      // 既没有视频也没有图片，不显示标签
+      return null;
+    });
+
+    // 判断当前媒体是否是视频
+    const isCurrentMediaVideo = computed(() => {
+      if (currentImageIndex.value < 0 || currentImageIndex.value >= productMedia.value.length) {
+        return false;
+      }
+      const currentMedia = productMedia.value[currentImageIndex.value];
+      return currentMedia.type === "video";
     });
 
     // 获取分类路径（显示 category_name/name）
@@ -363,6 +450,17 @@ export default {
         return name;
       }
       return "";
+    };
+
+    // 获取媒体分类的中文文本
+    const getMediaCategoryText = (category: string): string => {
+      const categoryMap: Record<string, string> = {
+        picking: "采摘",
+        packing: "打包",
+        loading: "装车",
+        departure: "发车",
+      };
+      return categoryMap[category] || category;
     };
 
     // 轮播图切换
@@ -389,6 +487,20 @@ export default {
       }
     };
 
+    // 视频容器点击处理：视频播放时点击暂停，暂停时点击继续播放
+    const handleVideoWrapperClick = (index: number) => {
+      // 如果视频正在播放，点击暂停
+      if (currentVideoIndex.value === index && isVideoPlaying.value) {
+        pauseVideo(index);
+      } 
+      // 如果视频已暂停（当前视频但未播放），点击继续播放
+      else if (currentVideoIndex.value === index && !isVideoPlaying.value) {
+        playVideo(index);
+      }
+      // 如果视频未开始播放，点击播放（通过播放按钮覆盖层处理）
+      // 这里不做处理，让播放按钮覆盖层的点击事件处理
+    };
+
     // 播放视频
     const playVideo = (index: number) => {
       // 暂停其他视频
@@ -400,8 +512,12 @@ export default {
       isVideoPlaying.value = true;
       
       // 获取视频上下文并播放
-      const videoContext = uni.createVideoContext(`video-${index}`);
-      videoContext.play();
+      nextTick(() => {
+        const videoContext = uni.createVideoContext(`video-${index}`);
+        if (videoContext) {
+          videoContext.play();
+        }
+      });
     };
 
     // 暂停视频
@@ -432,6 +548,18 @@ export default {
         isVideoPlaying.value = false;
         currentVideoIndex.value = -1;
       }
+    };
+
+    // 视频加载错误处理
+    const handleVideoError = (index: number) => {
+      console.error(`视频加载失败，索引: ${index}`);
+      videoErrors.value.add(index);
+      // 如果当前正在播放的视频出错，停止播放
+      if (currentVideoIndex.value === index) {
+        isVideoPlaying.value = false;
+        currentVideoIndex.value = -1;
+      }
+      // 静默处理，不显示toast，避免打扰用户
     };
 
     // 零售单位（用于门店客户参考）
@@ -548,16 +676,9 @@ export default {
     const loadPriceHistory = async (productId: string | number) => {
       historyLoading.value = true;
       try {
-        console.log(`[价格历史] 开始加载产品 ${productId} 的价格变动历史`);
         const history = await getAllProductPriceHistory(productId, 200);
-        console.log(`[价格历史] 加载完成，共 ${history.length} 条记录`);
         priceHistory.value = history;
-        
-        if (history.length === 0) {
-          console.warn(`[价格历史] 产品 ${productId} 没有价格变动记录`);
-        }
       } catch (error) {
-        console.error("[价格历史] 加载失败:", error);
         // 显示错误提示
         uni.showToast({
           title: "加载价格历史失败",
@@ -575,12 +696,7 @@ export default {
       try {
         const forecast = await getProductPriceForecast(productId);
         priceForecast.value = forecast;
-        console.log('[行情预测] 数据加载完成:', {
-          hasHistory: !!(forecast.history && forecast.history.length > 0),
-          historyLength: forecast.history?.length || 0,
-        });
       } catch (error) {
-        console.error("加载行情预测失败:", error);
         // 不显示错误提示，静默失败
       } finally {
         forecastLoading.value = false;
@@ -588,33 +704,70 @@ export default {
     };
 
 
-    // 分享
-    const handleShare = () => {
-      uni.showToast({
-        title: "分享功能",
-        icon: "none",
-      });
-    };
+    // 小程序分享配置
+    onShareAppMessage(() => {
+      if (!product.value) {
+        return {
+          title: "商品详情",
+          path: `/pages/product/detail?id=${productId.value}`,
+        };
+      }
+      
+      // 获取商品主图
+      const imageUrl = product.value.image_url || "";
+      
+      // 构建分享标题
+      const shareTitle = product.value.name 
+        ? `${product.value.name} - ¥${product.value.unit_price || 0}${product.value.unit ? '/' + product.value.unit : ''}`
+        : "商品详情";
+      
+      // 构建分享描述
+      const shareDesc = product.value.unit_stock 
+        ? `剩余库存：${product.value.unit_stock}${product.value.unit || '件'}`
+        : "优质商品，值得拥有";
+      
+      return {
+        title: shareTitle,
+        desc: shareDesc,
+        path: `/pages/product/detail?id=${product.value.id}`,
+        imageUrl: imageUrl,
+      };
+    });
 
     // 加载产品详情
-    const loadProductDetail = async (productId: string | number) => {
+    const loadProductDetail = async (id: string | number) => {
+      productId.value = id;
       loading.value = true;
       try {
-        const result = await getProductById(productId);
+        const result = await getProductById(id);
         product.value = result;
-        // 同时加载行情预测数据和价格变动历史
+        // 同时加载行情预测数据、价格变动历史和购物车数量
         if (result) {
-          loadPriceForecast(productId);
-          loadPriceHistory(productId);
+          loadPriceForecast(id);
+          loadPriceHistory(id);
+          loadCartCount();
         }
       } catch (error) {
-        console.error("加载产品详情失败:", error);
         uni.showToast({
           title: "加载失败",
           icon: "none",
         });
       } finally {
         loading.value = false;
+      }
+    };
+
+    // 加载购物车数量
+    const loadCartCount = async () => {
+      try {
+        // TODO: 获取当前用户ID
+        const userId = "1"; // 临时使用固定用户ID
+        const carts = await getCarts(userId);
+        // 计算购物车中不同商品种类的数量
+        cartItemCount.value = carts.length;
+      } catch (error) {
+        // 静默失败，不影响页面显示
+        cartItemCount.value = 0;
       }
     };
 
@@ -626,12 +779,13 @@ export default {
         // TODO: 获取当前用户ID
         const userId = "1"; // 临时使用固定用户ID
         await addToCart(userId, product.value.id, 1);
+        // 更新购物车数量
+        await loadCartCount();
         uni.showToast({
           title: "已加入购物车",
           icon: "success",
         });
       } catch (error) {
-        console.error("加入购物车失败:", error);
         uni.showToast({
           title: "加入购物车失败",
           icon: "none",
@@ -661,9 +815,9 @@ export default {
     };
 
     onLoad((options: any) => {
-      const productId = options.id;
-      if (productId) {
-        loadProductDetail(productId);
+      const id = options.id;
+      if (id) {
+        loadProductDetail(id);
       } else {
         uni.showToast({
           title: "产品ID缺失",
@@ -680,11 +834,13 @@ export default {
       product,
       loading,
       currentImageIndex,
-      productGrade,
+      mediaTypeLabel,
       handleSwiperChange,
       productMedia,
       currentVideoIndex,
       isVideoPlaying,
+      isCurrentMediaVideo,
+      cartItemCount,
       hasMetrics,
       calculatedNetPrice,
       retailUnit,
@@ -693,7 +849,8 @@ export default {
       handleVideoPlay,
       handleVideoPause,
       handleVideoEnded,
-      handleShare,
+      handleVideoError,
+      videoErrors,
       handleAddToCart,
       handleGoBack,
       handleGoStore,
@@ -710,6 +867,8 @@ export default {
       getChangeDirection,
       getChangeDirectionClass,
       getChangeAmount,
+      getMediaCategoryText,
+      handleVideoWrapperClick,
     };
   },
 };
@@ -775,6 +934,12 @@ export default {
   height: 100%;
 }
 
+.product-swiper swiper-item {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
 .product-image {
   width: 100%;
   height: 100%;
@@ -786,11 +951,16 @@ export default {
   width: 100%;
   height: 100%;
   background-color: #000;
+  overflow: hidden;
 }
 
 .product-video {
   width: 100%;
   height: 100%;
+  z-index: 100;
+  position: relative;
+  display: block;
+  background-color: #000;
 }
 
 .video-play-overlay {
@@ -803,7 +973,49 @@ export default {
   align-items: center;
   justify-content: center;
   background-color: rgba(0, 0, 0, 0.3);
-  z-index: 10;
+  z-index: 101;
+  pointer-events: none;
+}
+
+.video-play-overlay .play-button {
+  pointer-events: auto;
+}
+
+/* 视频加载错误提示 */
+.video-error-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.6);
+  z-index: 102;
+  pointer-events: none;
+}
+
+.error-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+  padding: 30rpx;
+  background-color: rgba(255, 255, 255, 0.95);
+  border-radius: 16rpx;
+}
+
+.error-icon {
+  font-size: 60rpx;
+  line-height: 1;
+}
+
+.error-text {
+  font-size: 26rpx;
+  color: #666;
+  line-height: 1;
 }
 
 .play-button {
@@ -833,6 +1045,36 @@ export default {
   border-radius: 20rpx;
   font-size: 24rpx;
   z-index: 100;
+}
+
+/* 视频播放时，将分页指示器往上移，避免遮挡全屏按钮 */
+.image-indicator.indicator-up {
+  bottom: 100rpx;
+}
+
+/* 媒体分类标签 */
+.media-category-badge {
+  position: absolute;
+  bottom: 20rpx;
+  left: 20rpx;
+  background-color: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(10rpx);
+  padding: 8rpx 16rpx;
+  border-radius: 20rpx;
+  z-index: 200;
+  pointer-events: none;
+}
+
+/* 视频播放时，将媒体分类标签往上移，避免遮挡进度条 */
+.media-category-badge.badge-up {
+  bottom: 100rpx;
+}
+
+.category-text {
+  font-size: 24rpx;
+  color: #fff;
+  font-weight: 500;
+  line-height: 1;
 }
 
 /* 产品价格和基本信息 */
@@ -888,15 +1130,40 @@ export default {
   color: #666;
 }
 
-.share-icon {
-  padding: 8rpx 16rpx;
-  background-color: #f5f5f5;
-  border-radius: 8rpx;
+.share-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  padding: 12rpx 24rpx;
+  background: linear-gradient(135deg, #ff9500 0%, #ff6b00 100%);
+  border-radius: 40rpx;
+  box-shadow: 0 4rpx 12rpx rgba(255, 149, 0, 0.3);
+  transition: all 0.3s ease;
+  border: none;
+  line-height: 1;
+  font-size: 0;
+}
+
+.share-button::after {
+  border: none;
+}
+
+.share-button:active {
+  transform: scale(0.95);
+  box-shadow: 0 2rpx 8rpx rgba(255, 149, 0, 0.4);
+}
+
+.share-icon-symbol {
+  font-size: 32rpx;
+  font-weight: bold;
+  line-height: 1;
 }
 
 .share-text {
-  font-size: 24rpx;
-  color: #666;
+  font-size: 26rpx;
+  color: #fff;
+  font-weight: 500;
 }
 
 .product-name-row {
@@ -939,6 +1206,13 @@ export default {
   font-size: 26rpx;
   color: #333;
   font-weight: 500;
+}
+
+/* 净果价颜色凸显 */
+.net-price-value {
+  color: #ff3b30;
+  font-weight: bold;
+  font-size: 28rpx;
 }
 
 /* 店铺名 */
@@ -1297,18 +1571,25 @@ export default {
 .icon-button {
   width: 60rpx;
   height: 60rpx;
-  background-color: #3cc51f;
   border-radius: 12rpx;
   display: flex;
   align-items: center;
   justify-content: center;
   margin-bottom: 6rpx;
+  position: relative;
+}
+
+.icon-button-store {
+  background-color: #f5f5f5;
+}
+
+.icon-button-cart {
+  background-color: #f5f5f5;
 }
 
 .icon-image {
-  width: 28rpx;
-  height: 28rpx;
-  filter: brightness(0) invert(1);
+  width: 32rpx;
+  height: 32rpx;
 }
 
 .icon-text {
@@ -1316,12 +1597,37 @@ export default {
   color: #666;
 }
 
+/* 购物车数量标识 */
+.cart-badge {
+  position: absolute;
+  top: -8rpx;
+  right: -8rpx;
+  min-width: 32rpx;
+  height: 32rpx;
+  background-color: #ff3b30;
+  border-radius: 16rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8rpx;
+  border: 2rpx solid #fff;
+  box-shadow: 0 2rpx 8rpx rgba(255, 59, 48, 0.3);
+}
+
+.cart-badge-text {
+  font-size: 20rpx;
+  color: #fff;
+  font-weight: bold;
+  line-height: 1;
+}
+
 .add-cart-btn {
   flex: 1;
   padding: 24rpx 0;
-  background-color: #ff9500;
+  background: linear-gradient(135deg, #ff9500 0%, #ff6b00 100%);
   border-radius: 40rpx;
   text-align: center;
+  box-shadow: 0 4rpx 12rpx rgba(255, 149, 0, 0.3);
 }
 
 .btn-text {

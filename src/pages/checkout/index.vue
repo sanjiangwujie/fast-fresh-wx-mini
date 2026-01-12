@@ -22,52 +22,20 @@
         </view>
       </view>
 
-      <!-- 收货地址 -->
+      <!-- 收货信息 -->
       <view class="section">
-        <view class="section-title">收货地址</view>
-        <view class="address-card" @click="handleSelectAddress">
-          <view class="address-content" v-if="deliveryAddress">
-            <view class="address-header">
-              <text class="receiver-name">{{ deliveryAddress.receiver_name || "" }}</text>
-              <text class="receiver-phone">{{ deliveryAddress.receiver_phone || "" }}</text>
-            </view>
-            <text class="address-detail">
-              {{ deliveryAddress.province || "" }}{{ deliveryAddress.city || "" }}{{ deliveryAddress.district || "" }}{{ deliveryAddress.detail_address || "" }}
-            </text>
-          </view>
-          <view class="address-placeholder" v-else>
-            <text class="placeholder-text">请选择或输入收货地址</text>
-          </view>
-          <text class="address-arrow">></text>
-        </view>
-      </view>
-
-      <!-- 地址输入表单（当没有地址时显示） -->
-      <view class="section" v-if="showAddressForm">
-        <view class="section-title">填写收货信息</view>
+        <view class="section-title">收货信息</view>
         <view class="form-item">
-          <text class="form-label">收货人</text>
-          <input class="form-input" v-model="addressForm.receiver_name" placeholder="请输入收货人姓名" />
+          <text class="form-label">收货人 <text class="required">*</text></text>
+          <input class="form-input" v-model="addressForm.receiver_name" placeholder="请输入收货人姓名" maxlength="20" />
         </view>
         <view class="form-item">
-          <text class="form-label">联系电话</text>
-          <input class="form-input" v-model="addressForm.receiver_phone" type="number" placeholder="请输入联系电话" />
+          <text class="form-label">联系电话 <text class="required">*</text></text>
+          <input class="form-input" v-model="addressForm.receiver_phone" type="number" placeholder="请输入联系电话" maxlength="11" />
         </view>
         <view class="form-item">
-          <text class="form-label">所在地区</text>
-          <input class="form-input" v-model="addressForm.region" placeholder="省/市/区" @click="handleSelectRegion" />
-        </view>
-        <view class="form-item">
-          <text class="form-label">详细地址</text>
-          <textarea class="form-textarea" v-model="addressForm.detail_address" placeholder="请输入详细地址" />
-        </view>
-        <view class="form-item">
-          <text class="form-label">邮政编码</text>
-          <input class="form-input" v-model="addressForm.postal_code" type="number" placeholder="选填" />
-        </view>
-        <view class="form-actions">
-          <view class="form-btn cancel-btn" @click="handleCancelAddressForm">取消</view>
-          <view class="form-btn confirm-btn" @click="handleConfirmAddress">确认</view>
+          <text class="form-label">详细地址 <text class="required">*</text></text>
+          <textarea class="form-textarea" v-model="addressForm.detail_address" placeholder="请输入详细地址（包含省市区街道门牌号等）" maxlength="200" />
         </view>
       </view>
 
@@ -132,32 +100,24 @@ import type { Carts } from "@/types/graphql";
 interface DeliveryAddress {
   receiver_name: string;
   receiver_phone: string;
-  province: string;
-  city: string;
-  district: string;
   detail_address: string;
-  postal_code?: string;
+  receiver_province?: string;
+  receiver_city?: string;
+  receiver_district?: string;
 }
 
 export default {
   setup() {
     const cartItems = ref<Carts[]>([]);
-    const deliveryAddress = ref<DeliveryAddress | null>(null);
     const remark = ref("");
     const freightAmount = ref(0); // 运费，默认0
     const discountAmount = ref(0); // 优惠金额，默认0
     const submitting = ref(false);
-    const showAddressForm = ref(false);
     
     const addressForm = ref({
       receiver_name: "",
       receiver_phone: "",
-      province: "",
-      city: "",
-      district: "",
-      region: "",
       detail_address: "",
-      postal_code: "",
     });
 
     // 计算商品总价
@@ -208,107 +168,49 @@ export default {
       }
     };
 
-    // 选择收货地址
-    const handleSelectAddress = () => {
-      // 如果没有地址，显示地址输入表单
-      if (!deliveryAddress.value) {
-        showAddressForm.value = true;
-      } else {
-        // 如果有地址，可以编辑
-        showAddressForm.value = true;
-        addressForm.value = {
-          receiver_name: deliveryAddress.value.receiver_name || "",
-          receiver_phone: deliveryAddress.value.receiver_phone || "",
-          province: deliveryAddress.value.province || "",
-          city: deliveryAddress.value.city || "",
-          district: deliveryAddress.value.district || "",
-          region: `${deliveryAddress.value.province || ""}${deliveryAddress.value.city || ""}${deliveryAddress.value.district || ""}`,
-          detail_address: deliveryAddress.value.detail_address || "",
-          postal_code: deliveryAddress.value.postal_code || "",
-        };
-      }
-    };
-
-    // 选择地区
-    const handleSelectRegion = () => {
-      // TODO: 实现地区选择器（可以使用uni-app的picker组件）
-      uni.showToast({
-        title: "地区选择功能待实现",
-        icon: "none",
-      });
-      // 临时示例：手动输入
-      uni.showModal({
-        title: "提示",
-        content: "请手动输入省/市/区，格式：省 市 区",
-        showCancel: false,
-      });
-    };
-
-    // 确认地址
-    const handleConfirmAddress = () => {
-      if (!addressForm.value.receiver_name) {
+    // 验证收货信息
+    const validateAddressForm = (): DeliveryAddress | null => {
+      // 验证收货人姓名
+      if (!addressForm.value.receiver_name || addressForm.value.receiver_name.trim() === "") {
         uni.showToast({
           title: "请输入收货人姓名",
           icon: "none",
         });
-        return;
+        return null;
       }
-      if (!addressForm.value.receiver_phone) {
+
+      // 验证联系电话
+      if (!addressForm.value.receiver_phone || addressForm.value.receiver_phone.trim() === "") {
         uni.showToast({
           title: "请输入联系电话",
           icon: "none",
         });
-        return;
+        return null;
       }
-      if (!addressForm.value.detail_address) {
+
+      // 验证手机号格式（简单验证）
+      const phoneRegex = /^1[3-9]\d{9}$/;
+      if (!phoneRegex.test(addressForm.value.receiver_phone)) {
+        uni.showToast({
+          title: "请输入正确的手机号码",
+          icon: "none",
+        });
+        return null;
+      }
+
+      // 验证详细地址
+      if (!addressForm.value.detail_address || addressForm.value.detail_address.trim() === "") {
         uni.showToast({
           title: "请输入详细地址",
           icon: "none",
         });
-        return;
+        return null;
       }
 
-      // 如果没有选择地区，尝试从region解析
-      if (!addressForm.value.province && addressForm.value.region) {
-        // 简单解析，实际应该使用地区选择器
-        const parts = addressForm.value.region.split(/[省市区县]/);
-        if (parts.length >= 3) {
-          addressForm.value.province = parts[0] + "省";
-          addressForm.value.city = parts[1] + "市";
-          addressForm.value.district = parts[2] + "区";
-        }
-      }
-
-      deliveryAddress.value = {
-        receiver_name: addressForm.value.receiver_name,
-        receiver_phone: addressForm.value.receiver_phone,
-        province: addressForm.value.province || "",
-        city: addressForm.value.city || "",
-        district: addressForm.value.district || "",
-        detail_address: addressForm.value.detail_address,
-        postal_code: addressForm.value.postal_code || "",
-      };
-
-      showAddressForm.value = false;
-      uni.showToast({
-        title: "地址已保存",
-        icon: "success",
-      });
-    };
-
-    // 取消地址表单
-    const handleCancelAddressForm = () => {
-      showAddressForm.value = false;
-      // 重置表单
-      addressForm.value = {
-        receiver_name: "",
-        receiver_phone: "",
-        province: "",
-        city: "",
-        district: "",
-        region: "",
-        detail_address: "",
-        postal_code: "",
+      return {
+        receiver_name: addressForm.value.receiver_name.trim(),
+        receiver_phone: addressForm.value.receiver_phone.trim(),
+        detail_address: addressForm.value.detail_address.trim(),
       };
     };
 
@@ -325,11 +227,9 @@ export default {
         return;
       }
 
-      if (!deliveryAddress.value) {
-        uni.showToast({
-          title: "请选择收货地址",
-          icon: "none",
-        });
+      // 验证收货信息
+      const deliveryAddress = validateAddressForm();
+      if (!deliveryAddress) {
         return;
       }
 
@@ -341,7 +241,7 @@ export default {
         const order = await createOrder({
           userId,
           cartItems: cartItems.value,
-          deliveryAddress: deliveryAddress.value,
+          deliveryAddress: deliveryAddress,
           remark: remark.value,
           totalAmount: totalAmount.value,
           freightAmount: freightAmount.value,
@@ -354,10 +254,10 @@ export default {
           icon: "success",
         });
 
-        // 跳转到订单详情或订单列表
+        // 跳转到订单结算页面
         setTimeout(() => {
           uni.redirectTo({
-            url: `/pages/orders/index`,
+            url: `/pages/order-payment/index?id=${order?.id}`,
           });
         }, 1500);
       } catch (error) {
@@ -371,21 +271,12 @@ export default {
       }
     };
 
-    onLoad((options: any) => {
-      // 如果有传递地址信息，可以在这里处理
-      if (options.address) {
-        try {
-          deliveryAddress.value = JSON.parse(decodeURIComponent(options.address));
-        } catch (e) {
-          console.error("解析地址信息失败:", e);
-        }
-      }
+    onLoad(() => {
       loadCartItems();
     });
 
     return {
       cartItems,
-      deliveryAddress,
       remark,
       freightAmount,
       discountAmount,
@@ -393,12 +284,7 @@ export default {
       actualAmount,
       submitting,
       calculateItemTotal,
-      handleSelectAddress,
-      handleSelectRegion,
-      handleConfirmAddress,
-      handleCancelAddressForm,
       handleSubmitOrder,
-      showAddressForm,
       addressForm,
     };
   },
@@ -415,11 +301,12 @@ export default {
 
 .scroll-view {
   width: 100%;
-  height: calc(100vh - 100rpx);
+  height: calc(100vh - 140rpx);
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 .bottom-spacer {
-  height: 20rpx;
+  height: 60rpx;
 }
 
 /* 区块样式 */
@@ -638,6 +525,10 @@ export default {
   margin-bottom: 0;
 }
 
+.form-item:last-child {
+  margin-bottom: 0;
+}
+
 .form-label {
   display: block;
   font-size: 28rpx;
@@ -646,27 +537,45 @@ export default {
   font-weight: 500;
 }
 
+.required {
+  color: #ff3b30;
+  font-size: 24rpx;
+}
+
 .form-input {
   width: 100%;
-  padding: 20rpx;
-  background-color: #f9f9f9;
+  height: 88rpx;
+  padding: 0 24rpx;
+  background-color: #fff;
   border-radius: 12rpx;
-  border: 1rpx solid #eee;
+  border: 1rpx solid #e0e0e0;
   font-size: 28rpx;
   color: #333;
   box-sizing: border-box;
+  line-height: 88rpx;
+}
+
+.form-input::placeholder {
+  color: #999;
+  font-size: 28rpx;
 }
 
 .form-textarea {
   width: 100%;
-  min-height: 120rpx;
-  padding: 20rpx;
-  background-color: #f9f9f9;
+  min-height: 160rpx;
+  padding: 24rpx;
+  background-color: #fff;
   border-radius: 12rpx;
-  border: 1rpx solid #eee;
+  border: 1rpx solid #e0e0e0;
   font-size: 28rpx;
   color: #333;
   box-sizing: border-box;
+  line-height: 1.6;
+}
+
+.form-textarea::placeholder {
+  color: #999;
+  font-size: 28rpx;
 }
 
 .form-actions {
@@ -690,8 +599,9 @@ export default {
 }
 
 .confirm-btn {
-  background-color: #3cc51f;
+  background: linear-gradient(135deg, #ff9500 0%, #ff6b00 100%);
   color: #fff;
+  box-shadow: 0 4rpx 12rpx rgba(255, 149, 0, 0.3);
 }
 
 /* 底部提交栏 */
@@ -729,9 +639,10 @@ export default {
 
 .submit-btn {
   padding: 24rpx 60rpx;
-  background-color: #3cc51f;
+  background: linear-gradient(135deg, #ff9500 0%, #ff6b00 100%);
   border-radius: 40rpx;
   margin-left: 20rpx;
+  box-shadow: 0 4rpx 12rpx rgba(255, 149, 0, 0.3);
 }
 
 .submit-btn.disabled {
