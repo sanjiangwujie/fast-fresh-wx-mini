@@ -117,11 +117,65 @@
 
 <script lang="ts">
 import { ref, computed, onMounted } from "vue";
-import { onLoad, onShareAppMessage } from "@dcloudio/uni-app";
+import { onLoad } from "@dcloudio/uni-app";
 import { getOrderById, updateOrderPaymentVoucher } from "@/api/order";
 import type { Orders } from "@/types/graphql";
 
+// 声明全局 getCurrentPages
+declare function getCurrentPages(): any[];
+
 export default {
+  // 小程序分享配置 - 必须在页面配置中定义（不能放在 setup 中）
+  onShareAppMessage(res: any) {
+    console.log("=== 分享触发 ===");
+    console.log("分享来源:", res.from);
+    console.log("分享目标:", res.target);
+    
+    // 获取当前页面的订单信息
+    // 通过 getCurrentPages 获取当前页面实例和参数
+    const pages = getCurrentPages();
+    const currentPage = pages[pages.length - 1];
+    const options = currentPage.options || {};
+    const orderId = options.id || "";
+    
+    // 尝试从页面实例获取订单信息（如果页面实例有存储）
+    const pageData = (currentPage as any).$vm || currentPage;
+    const order = pageData?.order || null;
+    const paymentVoucherUrl = pageData?.paymentVoucherUrl || "";
+    
+    const sharePath = `/pages/order-share/index?id=${orderId}`;
+    
+    console.log("分享路径:", sharePath);
+    console.log("订单ID:", orderId);
+    console.log("订单信息:", order);
+    
+    // 构建分享标题
+    let shareTitle = "订单详情";
+    if (order && order.id) {
+      const paymentStatusText = order.payment_status === "paid" ? "已支付" : 
+                                order.payment_status === "pending" ? "待支付" : 
+                                order.payment_status || "待确认";
+      shareTitle = `订单${order.id} - ${paymentStatusText}`;
+    } else if (orderId) {
+      shareTitle = `订单${orderId}详情`;
+    }
+    
+    const shareConfig: any = {
+      title: shareTitle,
+      path: sharePath,
+    };
+    
+    // 如果有付款截图，添加图片
+    if (paymentVoucherUrl) {
+      shareConfig.imageUrl = paymentVoucherUrl;
+    }
+    
+    console.log("分享配置:", shareConfig);
+    console.log("================");
+    
+    return shareConfig;
+  },
+  
   setup() {
     const order = ref<Orders | null>(null);
     const orderId = ref<string | number>("");
@@ -319,26 +373,6 @@ export default {
       }
     };
 
-    // 小程序分享配置
-    onShareAppMessage(() => {
-      // 确保分享路径指向只读的订单分享页面
-      const sharePath = order.value 
-        ? `/pages/order-share/index?id=${order.value.id}`
-        : `/pages/order-share/index?id=${orderId.value}`;
-      
-      console.log("分享路径:", sharePath); // 调试用
-      
-      return {
-        title: order.value 
-          ? `订单${order.value.id} - ${getPaymentStatusText(order.value.payment_status)}`
-          : "订单详情",
-        desc: order.value 
-          ? `订单金额：¥${formatPrice(order.value.actual_amount || 0)}`
-          : "订单详情查看",
-        path: sharePath,
-        imageUrl: paymentVoucherUrl.value || "",
-      };
-    });
 
     onLoad((options: any) => {
       if (options.id) {
@@ -354,6 +388,13 @@ export default {
         }, 1500);
       }
     });
+
+    // 将数据挂载到页面实例上，以便 onShareAppMessage 访问
+    const pageInstance = getCurrentPages()[getCurrentPages().length - 1];
+    if (pageInstance) {
+      (pageInstance as any).order = order;
+      (pageInstance as any).paymentVoucherUrl = paymentVoucherUrl;
+    }
 
     return {
       order,

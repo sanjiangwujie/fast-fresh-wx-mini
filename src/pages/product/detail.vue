@@ -312,7 +312,7 @@
 
 <script lang="ts">
 import { ref, computed, nextTick } from "vue";
-import { onLoad, onShareAppMessage } from "@dcloudio/uni-app";
+import { onLoad } from "@dcloudio/uni-app";
 import { 
   getProductById, 
   getProductPriceForecast, 
@@ -324,10 +324,66 @@ import { addToCart, getCarts } from "@/api/cart";
 import type { Products } from "@/types/graphql";
 import PriceLineChart, { type PriceDataPoint } from "@/components/PriceLineChart.vue";
 
+// 声明全局 getCurrentPages
+declare function getCurrentPages(): any[];
+
 export default {
   components: {
     PriceLineChart,
   },
+  
+  // 小程序分享配置 - 必须在页面配置中定义（不能放在 setup 中）
+  onShareAppMessage(res: any) {
+    console.log("=== 商品分享触发 ===");
+    console.log("分享来源:", res.from);
+    console.log("分享目标:", res.target);
+    
+    // 获取当前页面的商品信息
+    const pages = getCurrentPages();
+    const currentPage = pages[pages.length - 1];
+    const options = currentPage.options || {};
+    const productId = options.id || "";
+    
+    // 尝试从页面实例获取商品信息（如果页面实例有存储）
+    const pageData = (currentPage as any).$vm || currentPage;
+    const product = pageData?.product || null;
+    
+    console.log("分享商品ID:", productId);
+    console.log("商品信息:", product);
+    
+    const sharePath = `/pages/product/detail?id=${productId}`;
+    
+    // 构建分享标题
+    let shareTitle = "商品详情";
+    let imageUrl = "";
+    
+    if (product && product.id) {
+      const price = product.unit_price || 0;
+      const unit = product.unit || "";
+      shareTitle = product.name 
+        ? `${product.name} - ¥${price}${unit ? '/' + unit : ''}`
+        : "商品详情";
+      imageUrl = product.image_url || "";
+    } else if (productId) {
+      shareTitle = `商品${productId}详情`;
+    }
+    
+    const shareConfig: any = {
+      title: shareTitle,
+      path: sharePath,
+    };
+    
+    // 如果有商品图片，添加图片
+    if (imageUrl) {
+      shareConfig.imageUrl = imageUrl;
+    }
+    
+    console.log("分享配置:", shareConfig);
+    console.log("================");
+    
+    return shareConfig;
+  },
+  
   setup() {
     const product = ref<Products | null>(null);
     const productId = ref<string | number>("");
@@ -704,35 +760,17 @@ export default {
     };
 
 
-    // 小程序分享配置
-    onShareAppMessage(() => {
-      if (!product.value) {
-        return {
-          title: "商品详情",
-          path: `/pages/product/detail?id=${productId.value}`,
-        };
+    // 更新页面实例数据（用于分享功能）
+    const updatePageInstance = () => {
+      const pages = getCurrentPages();
+      if (pages.length > 0) {
+        const pageInstance = pages[pages.length - 1];
+        if (pageInstance) {
+          (pageInstance as any).product = product.value;
+          (pageInstance as any).productId = productId.value;
+        }
       }
-      
-      // 获取商品主图
-      const imageUrl = product.value.image_url || "";
-      
-      // 构建分享标题
-      const shareTitle = product.value.name 
-        ? `${product.value.name} - ¥${product.value.unit_price || 0}${product.value.unit ? '/' + product.value.unit : ''}`
-        : "商品详情";
-      
-      // 构建分享描述
-      const shareDesc = product.value.unit_stock 
-        ? `剩余库存：${product.value.unit_stock}${product.value.unit || '件'}`
-        : "优质商品，值得拥有";
-      
-      return {
-        title: shareTitle,
-        desc: shareDesc,
-        path: `/pages/product/detail?id=${product.value.id}`,
-        imageUrl: imageUrl,
-      };
-    });
+    };
 
     // 加载产品详情
     const loadProductDetail = async (id: string | number) => {
@@ -741,6 +779,8 @@ export default {
       try {
         const result = await getProductById(id);
         product.value = result;
+        // 更新页面实例数据
+        updatePageInstance();
         // 同时加载行情预测数据、价格变动历史和购物车数量
         if (result) {
           loadPriceForecast(id);
@@ -817,6 +857,8 @@ export default {
     onLoad((options: any) => {
       const id = options.id;
       if (id) {
+        // 先更新页面实例（设置 productId）
+        updatePageInstance();
         loadProductDetail(id);
       } else {
         uni.showToast({
@@ -828,7 +870,6 @@ export default {
         }, 1500);
       }
     });
-
 
     return {
       product,
