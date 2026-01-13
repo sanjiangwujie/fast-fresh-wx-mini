@@ -68,54 +68,6 @@
 			}
 		},
 		{
-			"path": "pages/batch-manage/index",
-			"style": {
-				"navigationBarTitleText": "批次管理"
-			}
-		},
-		{
-			"path": "pages/product-manage/index",
-			"style": {
-				"navigationBarTitleText": "商品管理"
-			}
-		},
-		{
-			"path": "pages/product-create/index",
-			"style": {
-				"navigationBarTitleText": "创建商品"
-			}
-		},
-		{
-			"path": "pages/product-edit/index",
-			"style": {
-				"navigationBarTitleText": "编辑商品"
-			}
-		},
-		{
-			"path": "pages/batch-select/index",
-			"style": {
-				"navigationBarTitleText": "选择批次"
-			}
-		},
-		{
-			"path": "pages/batch-create/index",
-			"style": {
-				"navigationBarTitleText": "新建批次"
-			}
-		},
-		{
-			"path": "pages/batch-edit/index",
-			"style": {
-				"navigationBarTitleText": "编辑批次"
-			}
-		},
-		{
-			"path": "pages/order-manage/index",
-			"style": {
-				"navigationBarTitleText": "订单管理"
-			}
-		},
-		{
 			"path": "pages/address-manage/index",
 			"style": {
 				"navigationBarTitleText": "收货地址"
@@ -136,6 +88,105 @@
 					"path": "index",
 					"style": {
 						"navigationBarTitleText": "资源列表"
+					}
+				}
+			]
+		},
+		{
+			"root": "subPackages/farmer",
+			"pages": [
+				{
+					"path": "batch-manage/index",
+					"style": {
+						"navigationBarTitleText": "批次管理"
+					}
+				},
+				{
+					"path": "batch-create/index",
+					"style": {
+						"navigationBarTitleText": "新建批次"
+					}
+				},
+				{
+					"path": "batch-edit/index",
+					"style": {
+						"navigationBarTitleText": "编辑批次"
+					}
+				},
+				{
+					"path": "batch-select/index",
+					"style": {
+						"navigationBarTitleText": "选择批次"
+					}
+				}
+			]
+		},
+		{
+			"root": "subPackages/operator",
+			"pages": [
+				{
+					"path": "product-manage/index",
+					"style": {
+						"navigationBarTitleText": "商品管理"
+					}
+				},
+				{
+					"path": "product-create/index",
+					"style": {
+						"navigationBarTitleText": "创建商品"
+					}
+				},
+				{
+					"path": "product-edit/index",
+					"style": {
+						"navigationBarTitleText": "编辑商品"
+					}
+				},
+				{
+					"path": "order-manage/index",
+					"style": {
+						"navigationBarTitleText": "订单管理"
+					}
+				}
+			]
+		},
+		{
+			"root": "subPackages/admin",
+			"pages": [
+				{
+					"path": "category-manage/index",
+					"style": {
+						"navigationBarTitleText": "分类管理"
+					}
+				},
+				{
+					"path": "origin-manage/index",
+					"style": {
+						"navigationBarTitleText": "产地管理"
+					}
+				},
+				{
+					"path": "banner-manage/index",
+					"style": {
+						"navigationBarTitleText": "轮播图管理"
+					}
+				},
+				{
+					"path": "kingkong-manage/index",
+					"style": {
+						"navigationBarTitleText": "快捷菜单管理"
+					}
+				},
+				{
+					"path": "farmer-manage/index",
+					"style": {
+						"navigationBarTitleText": "果农管理"
+					}
+				},
+				{
+					"path": "operator-manage/index",
+					"style": {
+						"navigationBarTitleText": "运营账号管理"
 					}
 				}
 			]

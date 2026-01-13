@@ -189,8 +189,7 @@ import { onLoad } from "@dcloudio/uni-app";
 import { getProductById, updateProduct } from "@/api/product";
 import { getCategories } from "@/api/category";
 import { getOrigins } from "@/api/origin";
-import { isLoggedIn, getToken } from "@/api/auth";
-import { API_BASE_URL } from "@/project-config";
+import { uploadToQiniu } from "@/api/upload";
 import type { Products, Categories, Origins } from "@/types/graphql";
 
 export default {
@@ -435,41 +434,17 @@ export default {
       });
     };
 
-    // 上传图片
+    // 上传图片（使用七牛云直传）
     const uploadImage = async (filePath: string) => {
       uploading.value = true;
       try {
-        const uploadUrl = `${API_BASE_URL}/api/upload/form`;
-
-        const uploadResult = await new Promise<any>((resolve, reject) => {
-          const token = getToken();
-          uni.uploadFile({
-            url: uploadUrl,
-            filePath: filePath,
-            name: "file",
-            formData: {},
-            header: {
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            },
-            success: (res) => {
-              try {
-                const data = JSON.parse(res.data);
-                if (data.url) {
-                  resolve(data);
-                } else {
-                  reject(new Error(data.error || "上传失败"));
-                }
-              } catch (e) {
-                reject(new Error("解析响应失败"));
-              }
-            },
-            fail: (err) => {
-              reject(err);
-            },
-          });
+        // 使用七牛云直传
+        const { url } = await uploadToQiniu(filePath, (progress) => {
+          // 可以在这里显示上传进度
+          console.log("上传进度:", progress + "%");
         });
 
-        form.value.image_url = uploadResult.url;
+        form.value.image_url = url;
         uni.showToast({
           title: "上传成功",
           icon: "success",

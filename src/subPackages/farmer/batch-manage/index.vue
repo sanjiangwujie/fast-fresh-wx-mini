@@ -146,14 +146,14 @@ export default {
     // 查看批次详情（跳转到编辑页面）
     const handleViewBatch = (batchId: string | number) => {
       uni.navigateTo({
-        url: `/pages/batch-edit/index?id=${batchId}`,
+        url: `/subPackages/farmer/batch-edit/index?id=${batchId}`,
       });
     };
 
     // 添加批次
     const handleAddBatch = () => {
       uni.navigateTo({
-        url: "/pages/batch-create/index",
+        url: "/subPackages/farmer/batch-create/index",
       });
     };
 

@@ -70,3 +70,95 @@ export const getCategoryNames = cacheStore.cache(
     forceRefresh: false,
   }
 );
+
+/**
+ * 创建分类
+ */
+export const createCategory = async (params: {
+  name: string;
+  category_name?: string | null;
+}): Promise<Categories | null> => {
+  const mutation = `
+    mutation CreateCategory($name: String!, $category_name: String) {
+      insert_categories_one(object: { name: $name, category_name: $category_name }) {
+        id
+        name
+        category_name
+        created_at
+        updated_at
+      }
+    }
+  `;
+
+  const result = await client.execute<{ insert_categories_one: Categories | null }>({
+    query: mutation,
+    variables: {
+      name: params.name,
+      category_name: params.category_name || null,
+    },
+  });
+
+  return result.insert_categories_one;
+};
+
+/**
+ * 更新分类
+ */
+export const updateCategory = async (
+  id: string | number,
+  params: {
+    name?: string;
+    category_name?: string | null;
+  }
+): Promise<Categories | null> => {
+  const mutation = `
+    mutation UpdateCategory($id: bigint!, $name: String, $category_name: String) {
+      update_categories_by_pk(
+        pk_columns: { id: $id }
+        _set: { name: $name, category_name: $category_name }
+      ) {
+        id
+        name
+        category_name
+        created_at
+        updated_at
+      }
+    }
+  `;
+
+  const setData: any = {};
+  if (params.name !== undefined) setData.name = params.name;
+  if (params.category_name !== undefined) setData.category_name = params.category_name;
+
+  const result = await client.execute<{ update_categories_by_pk: Categories | null }>({
+    query: mutation,
+    variables: {
+      id: Number(id),
+      ...setData,
+    },
+  });
+
+  return result.update_categories_by_pk;
+};
+
+/**
+ * 删除分类
+ */
+export const deleteCategory = async (id: string | number): Promise<boolean> => {
+  const mutation = `
+    mutation DeleteCategory($id: bigint!) {
+      delete_categories_by_pk(id: $id) {
+        id
+      }
+    }
+  `;
+
+  const result = await client.execute<{ delete_categories_by_pk: { id: bigint } | null }>({
+    query: mutation,
+    variables: {
+      id: Number(id),
+    },
+  });
+
+  return result.delete_categories_by_pk !== null;
+};

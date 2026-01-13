@@ -70,3 +70,95 @@ export const getOrigins = cacheStore.cache(
     forceRefresh: false,
   }
 );
+
+/**
+ * 创建产地
+ */
+export const createOrigin = async (params: {
+  name: string;
+  category_name?: string | null;
+}): Promise<Origins | null> => {
+  const mutation = `
+    mutation CreateOrigin($name: String!, $category_name: String) {
+      insert_origins_one(object: { name: $name, category_name: $category_name }) {
+        id
+        name
+        category_name
+        created_at
+        updated_at
+      }
+    }
+  `;
+
+  const result = await client.execute<{ insert_origins_one: Origins | null }>({
+    query: mutation,
+    variables: {
+      name: params.name,
+      category_name: params.category_name || null,
+    },
+  });
+
+  return result.insert_origins_one;
+};
+
+/**
+ * 更新产地
+ */
+export const updateOrigin = async (
+  id: string | number,
+  params: {
+    name?: string;
+    category_name?: string | null;
+  }
+): Promise<Origins | null> => {
+  const mutation = `
+    mutation UpdateOrigin($id: Int!, $name: String, $category_name: String) {
+      update_origins_by_pk(
+        pk_columns: { id: $id }
+        _set: { name: $name, category_name: $category_name }
+      ) {
+        id
+        name
+        category_name
+        created_at
+        updated_at
+      }
+    }
+  `;
+
+  const setData: any = {};
+  if (params.name !== undefined) setData.name = params.name;
+  if (params.category_name !== undefined) setData.category_name = params.category_name;
+
+  const result = await client.execute<{ update_origins_by_pk: Origins | null }>({
+    query: mutation,
+    variables: {
+      id: Number(id),
+      ...setData,
+    },
+  });
+
+  return result.update_origins_by_pk;
+};
+
+/**
+ * 删除产地
+ */
+export const deleteOrigin = async (id: string | number): Promise<boolean> => {
+  const mutation = `
+    mutation DeleteOrigin($id: Int!) {
+      delete_origins_by_pk(id: $id) {
+        id
+      }
+    }
+  `;
+
+  const result = await client.execute<{ delete_origins_by_pk: { id: number } | null }>({
+    query: mutation,
+    variables: {
+      id: Number(id),
+    },
+  });
+
+  return result.delete_origins_by_pk !== null;
+};

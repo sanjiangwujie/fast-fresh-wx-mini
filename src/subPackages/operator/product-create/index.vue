@@ -207,8 +207,7 @@ import { getBatches, getBatchById } from "@/api/batch";
 import { createProduct } from "@/api/product";
 import { getCategories } from "@/api/category";
 import { getOrigins } from "@/api/origin";
-import { isLoggedIn, getToken } from "@/api/auth";
-import { API_BASE_URL } from "@/project-config";
+import { uploadToQiniu } from "@/api/upload";
 import type { Batches, Categories, Origins } from "@/types/graphql";
 
 export default {
@@ -242,7 +241,7 @@ export default {
     // 选择批次
     const handleSelectBatch = () => {
       uni.navigateTo({
-        url: "/pages/batch-select/index",
+        url: "/subPackages/farmer/batch-select/index",
       });
     };
 
@@ -529,50 +528,21 @@ export default {
       });
     };
 
-    // 上传图片
+    // 上传图片（使用七牛云直传）
     const uploadImage = async (filePath: string) => {
       uploading.value = true;
       try {
-        const uploadUrl = `${API_BASE_URL}/api/upload/form`;
-
-        const uploadResult = await new Promise<any>((resolve, reject) => {
-          const token = getToken();
-          uni.uploadFile({
-            url: uploadUrl,
-            filePath: filePath,
-            name: "file",
-            formData: {},
-            header: {
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            },
-            success: (res) => {
-              try {
-                const data = JSON.parse(res.data);
-                if (data.success && data.data) {
-                  const fileData = Array.isArray(data.data) ? data.data[0] : data.data;
-                  resolve(fileData);
-                } else {
-                  reject(new Error(data.message || "上传失败"));
-                }
-              } catch (e) {
-                reject(new Error("解析响应失败"));
-              }
-            },
-            fail: (err) => {
-              reject(err);
-            },
-          });
+        // 使用七牛云直传
+        const { url } = await uploadToQiniu(filePath, (progress) => {
+          // 可以在这里显示上传进度
+          console.log("上传进度:", progress + "%");
         });
 
-        if (uploadResult.url) {
-          form.value.image_url = uploadResult.url;
-          uni.showToast({
-            title: "上传成功",
-            icon: "success",
-          });
-        } else {
-          throw new Error("上传响应中缺少URL");
-        }
+        form.value.image_url = url;
+        uni.showToast({
+          title: "上传成功",
+          icon: "success",
+        });
       } catch (error) {
         console.error("上传图片失败:", error);
         uni.showToast({

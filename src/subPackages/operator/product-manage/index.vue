@@ -129,14 +129,14 @@ export default {
     // 查看商品详情
     const handleViewProduct = (productId: string | number) => {
       uni.navigateTo({
-        url: `/pages/product-edit/index?id=${productId}`,
+        url: `/subPackages/operator/product-edit/index?id=${productId}`,
       });
     };
 
     // 从批次生成商品
     const handleCreateProduct = () => {
       uni.navigateTo({
-        url: "/pages/product-create/index",
+        url: "/subPackages/operator/product-create/index",
       });
     };
 

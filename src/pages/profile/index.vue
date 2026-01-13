@@ -59,6 +59,55 @@
       </view>
     </view>
 
+    <!-- 小程序管理功能（管理员可见） -->
+    <view class="menu-section" v-if="hasAdminRole">
+      <view class="section-header">
+        <text class="section-title">小程序管理</text>
+      </view>
+      <view class="menu-item" @click="handleMenuClick('category-manage')">
+        <view class="menu-icon-wrapper">
+          <text class="menu-icon">📂</text>
+          <text class="menu-text">分类管理</text>
+        </view>
+        <text class="menu-arrow">›</text>
+      </view>
+      <view class="menu-item" @click="handleMenuClick('origin-manage')">
+        <view class="menu-icon-wrapper">
+          <text class="menu-icon">🌍</text>
+          <text class="menu-text">产地管理</text>
+        </view>
+        <text class="menu-arrow">›</text>
+      </view>
+      <view class="menu-item" @click="handleMenuClick('banner-manage')">
+        <view class="menu-icon-wrapper">
+          <text class="menu-icon">🖼️</text>
+          <text class="menu-text">轮播图管理</text>
+        </view>
+        <text class="menu-arrow">›</text>
+      </view>
+      <view class="menu-item" @click="handleMenuClick('kingkong-manage')">
+        <view class="menu-icon-wrapper">
+          <text class="menu-icon">⚡</text>
+          <text class="menu-text">快捷菜单</text>
+        </view>
+        <text class="menu-arrow">›</text>
+      </view>
+      <view class="menu-item" @click="handleMenuClick('farmer-manage')">
+        <view class="menu-icon-wrapper">
+          <text class="menu-icon">👨‍🌾</text>
+          <text class="menu-text">果农管理</text>
+        </view>
+        <text class="menu-arrow">›</text>
+      </view>
+      <view class="menu-item" @click="handleMenuClick('operator-manage')">
+        <view class="menu-icon-wrapper">
+          <text class="menu-icon">👔</text>
+          <text class="menu-text">运营账号管理</text>
+        </view>
+        <text class="menu-arrow">›</text>
+      </view>
+    </view>
+
     <!-- 其他功能 -->
     <view class="menu-section">
       <view class="menu-item" @click="handleMenuClick('settings')">
@@ -158,6 +207,11 @@ export default {
       return userRoles.value.some((role) => role.role_type === "operator");
     });
 
+    // 检查是否有管理员角色
+    const hasAdminRole = computed(() => {
+      return userRoles.value.some((role) => role.role_type === "admin");
+    });
+
     // 处理菜单点击
     const handleMenuClick = (type: string) => {
       console.log("[个人中心] 点击菜单:", type);
@@ -186,19 +240,19 @@ export default {
         case "batches":
           console.log("[个人中心] 跳转到批次管理");
           uni.navigateTo({
-            url: "/pages/batch-manage/index",
+            url: "/subPackages/farmer/batch-manage/index",
           });
           break;
         case "products":
           console.log("[个人中心] 跳转到商品管理");
           uni.navigateTo({
-            url: "/pages/product-manage/index",
+            url: "/subPackages/operator/product-manage/index",
           });
           break;
         case "order-manage":
           console.log("[个人中心] 跳转到订单管理");
           uni.navigateTo({
-            url: "/pages/order-manage/index",
+            url: "/subPackages/operator/order-manage/index",
             success: () => {
               console.log("[个人中心] 订单管理页面跳转成功");
             },
@@ -209,6 +263,36 @@ export default {
                 icon: "none",
               });
             },
+          });
+          break;
+        case "category-manage":
+          uni.navigateTo({
+            url: "/subPackages/admin/category-manage/index",
+          });
+          break;
+        case "origin-manage":
+          uni.navigateTo({
+            url: "/subPackages/admin/origin-manage/index",
+          });
+          break;
+        case "banner-manage":
+          uni.navigateTo({
+            url: "/subPackages/admin/banner-manage/index",
+          });
+          break;
+        case "kingkong-manage":
+          uni.navigateTo({
+            url: "/subPackages/admin/kingkong-manage/index",
+          });
+          break;
+        case "farmer-manage":
+          uni.navigateTo({
+            url: "/subPackages/admin/farmer-manage/index",
+          });
+          break;
+        case "operator-manage":
+          uni.navigateTo({
+            url: "/subPackages/admin/operator-manage/index",
           });
           break;
         case "settings":
@@ -269,6 +353,7 @@ export default {
       userInfo,
       hasFarmerRole,
       hasOperatorRole,
+      hasAdminRole,
       handleMenuClick,
       handleLogout,
       handleUserInfoClick,
