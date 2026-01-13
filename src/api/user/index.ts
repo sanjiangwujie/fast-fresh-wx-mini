@@ -1,5 +1,5 @@
 import client from "@/config-lib/hasura-graphql-client/hasura-graphql-client";
-import type { Users } from "@/types/graphql";
+import type { Users, User_Roles } from "@/types/graphql";
 import cacheStore from "@/config-lib/cache-store/cache-store";
 
 /**
@@ -37,3 +37,52 @@ export const getUser = cacheStore.cache(
     forceRefresh: false,
   }
 );
+
+/**
+ * 获取用户的角色列表
+ * @param userId 用户ID
+ * @returns 用户角色列表
+ */
+export const getUserRoles = cacheStore.cache(
+  async (userId: string | number): Promise<User_Roles[]> => {
+    const query = `
+      query GetUserRoles($userId: bigint!) {
+        user_roles(where: { user_users: { _eq: $userId } }) {
+          id
+          role_type
+          user_users
+          created_at
+          updated_at
+        }
+      }
+    `;
+
+    const result = await client.execute<{ user_roles: User_Roles[] }>({
+      query,
+      variables: {
+        userId: Number(userId),
+      },
+    });
+
+    return result.user_roles || [];
+  },
+  {
+    duration: 1000 * 60 * 5, // 缓存5分钟
+    useCache: true,
+    forceRefresh: false,
+  }
+);
+
+/**
+ * 检查用户是否有指定角色
+ * @param userId 用户ID
+ * @param roleType 角色类型 (operator/farmer/store)
+ * @returns 是否有该角色
+ */
+export const hasUserRole = async (
+  userId: string | number,
+  roleType: string
+): Promise<boolean> => {
+  const roles = await getUserRoles(userId);
+  return roles.some((role) => role.role_type === roleType);
+};

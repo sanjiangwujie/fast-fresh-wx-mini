@@ -33,8 +33,8 @@
         :key="index"
         @click="handleKingkongClick(item)"
       >
-        <image class="kingkong-icon" :src="item.icon" mode="aspectFit" />
-        <text class="kingkong-text">{{ item.text }}</text>
+        <image class="kingkong-icon" :src="item.img_url || '/static/default-avatar.png'" mode="aspectFit" />
+        <text class="kingkong-text">{{ item.title }}</text>
       </view>
     </view>
 
@@ -52,7 +52,12 @@
           >
             <image class="product-image" :src="item.image_url || ''" mode="aspectFill" />
             <view class="product-info">
-              <text class="product-name">{{ item.name }}</text>
+              <view class="product-name-row">
+                <text class="product-name">{{ item.name }}</text>
+                <view class="product-status-badge off-shelf" v-if="item.is_off_shelf">
+                  <text class="badge-text">已下架</text>
+                </view>
+              </view>
               <view class="product-price-row">
                 <text class="product-price">¥{{ item.unit_price || 0 }}</text>
                 <text class="product-unit" v-if="item.unit">/{{ item.unit }}</text>
@@ -75,7 +80,12 @@
           >
             <image class="product-image" :src="item.image_url || ''" mode="aspectFill" />
             <view class="product-info">
-              <text class="product-name">{{ item.name }}</text>
+              <view class="product-name-row">
+                <text class="product-name">{{ item.name }}</text>
+                <view class="product-status-badge off-shelf" v-if="item.is_off_shelf">
+                  <text class="badge-text">已下架</text>
+                </view>
+              </view>
               <view class="product-price-row">
                 <text class="product-price">¥{{ item.unit_price || 0 }}</text>
                 <text class="product-unit" v-if="item.unit">/{{ item.unit }}</text>
@@ -102,32 +112,17 @@
 
 <script lang="ts">
 import { ref, computed, onMounted } from "vue";
-import { onLoad, onPullDownRefresh, onReachBottom } from "@dcloudio/uni-app";
+import { onLoad, onReachBottom } from "@dcloudio/uni-app";
 import { getProducts } from "@/api/product";
 import { getBanners } from "@/api/banner";
-import type { Products, Banners } from "@/types/graphql";
+import { getHomeKingkongItems } from "@/api/home";
+import type { Products, Banners, Home_Kingkong_Items } from "@/types/graphql";
 import { Order_By } from "@/types/graphql";
-
-interface KingkongItem {
-  icon: string;
-  text: string;
-  link?: string;
-}
 
 export default {
   setup() {
     const banners = ref<Banners[]>([]);
-
-    const kingkongItems = ref<KingkongItem[]>([
-      { icon: "/static/kingkong/kingkong1.png", text: "新鲜水果" },
-      { icon: "/static/kingkong/kingkong2.png", text: "时令蔬菜" },
-      { icon: "/static/kingkong/kingkong3.png", text: "精选肉类" },
-      { icon: "/static/kingkong/kingkong4.png", text: "海鲜水产" },
-      { icon: "/static/kingkong/kingkong5.png", text: "粮油调味" },
-      { icon: "/static/kingkong/kingkong6.png", text: "休闲零食" },
-      { icon: "/static/kingkong/kingkong7.png", text: "酒水饮料" },
-      { icon: "/static/kingkong/kingkong8.png", text: "更多分类" },
-    ]);
+    const kingkongItems = ref<Home_Kingkong_Items[]>([]);
 
     const products = ref<Products[]>([]);
     const loading = ref(false);
@@ -167,6 +162,21 @@ export default {
           title: "加载轮播图失败",
           icon: "none",
         });
+      }
+    };
+
+    // 加载金刚区数据
+    const loadKingkongItems = async () => {
+      try {
+        const result = await getHomeKingkongItems({
+          order_by: [{ sort: "asc" as any }],
+          limit: 20,
+        });
+        kingkongItems.value = result;
+      } catch (error) {
+        console.error("加载金刚区失败:", error);
+        // 如果加载失败，使用默认数据
+        kingkongItems.value = [];
       }
     };
 
@@ -221,10 +231,89 @@ export default {
     };
 
     // 处理金刚区点击
-    const handleKingkongClick = (item: KingkongItem) => {
-      uni.switchTab({
-        url: "/pages/categories/index",
-      });
+    const handleKingkongClick = (item: Home_Kingkong_Items) => {
+      if (!item.link_url) {
+        // 如果没有配置链接，默认跳转到分类页
+        uni.switchTab({
+          url: "/pages/categories/index",
+        });
+        return;
+      }
+
+      // 解析链接URL
+      const linkUrl = item.link_url;
+      
+      // 如果链接是分类页面，提取category_name参数
+      if (linkUrl.includes("/pages/categories/index")) {
+        // 手动解析URL参数（兼容小程序环境，不使用URLSearchParams）
+        let categoryName: string | null = null;
+        const queryIndex = linkUrl.indexOf("?");
+        if (queryIndex !== -1) {
+          const queryString = linkUrl.substring(queryIndex + 1);
+          // 手动解析查询参数
+          const params: Record<string, string> = {};
+          const pairs = queryString.split("&");
+          for (const pair of pairs) {
+            const [key, value] = pair.split("=");
+            if (key && value) {
+              params[decodeURIComponent(key)] = decodeURIComponent(value);
+            }
+          }
+          categoryName = params["category_name"] || null;
+        }
+        
+        if (categoryName) {
+          // 跳转到分类页并传递category_name参数
+          // 注意：switchTab不支持参数，需要使用storage传递
+          uni.setStorageSync("category_name_param", categoryName);
+          uni.switchTab({
+            url: "/pages/categories/index",
+            success: () => {
+              // 延迟清除，确保页面能读取到
+              setTimeout(() => {
+                uni.removeStorageSync("category_name_param");
+              }, 1000);
+            },
+          });
+        } else {
+          uni.switchTab({
+            url: "/pages/categories/index",
+          });
+        }
+      } else {
+        // 其他链接直接跳转
+        if (linkUrl.startsWith("/")) {
+          // 小程序内部路径
+          if (linkUrl.startsWith("/pages/")) {
+            // 判断是否是tabBar页面
+            const tabBarPages = ["/pages/index/index", "/pages/categories/index", "/pages/cart/index", "/pages/profile/index"];
+            if (tabBarPages.includes(linkUrl.split("?")[0])) {
+              uni.switchTab({
+                url: linkUrl.split("?")[0],
+              });
+            } else {
+              uni.navigateTo({
+                url: linkUrl,
+              });
+            }
+          } else {
+            uni.navigateTo({
+              url: linkUrl,
+            });
+          }
+        } else {
+          // 外部链接（H5）
+          // #ifdef H5
+          window.open(linkUrl, "_blank");
+          // #endif
+          // #ifndef H5
+          uni.showToast({
+            title: "暂不支持外部链接",
+            icon: "none",
+          });
+          // #endif
+        }
+      }
     };
 
     // 处理商品点击
@@ -243,14 +332,10 @@ export default {
 
     onLoad(() => {
       loadBanners();
+      loadKingkongItems();
       loadProducts(true);
     });
 
-    onPullDownRefresh(() => {
-      Promise.all([loadBanners(), loadProducts(true)]).finally(() => {
-        uni.stopPullDownRefresh();
-      });
-    });
 
     onReachBottom(() => {
       if (hasMore.value && !loading.value) {

@@ -37,7 +37,12 @@
       <view class="order-item" v-for="order in orders" :key="order.id" @click="handleOrderClick(order)">
         <!-- 订单头部 -->
         <view class="order-header">
-          <text class="order-number">订单号: {{ order.id }}</text>
+          <view class="order-header-left">
+            <text class="order-number">订单号: {{ order.id }}</text>
+            <text class="user-info" v-if="order.user">
+              {{ order.user.nickname || order.user.phone || '用户' }}
+            </text>
+          </view>
           <view class="status-container">
             <text class="order-status" :class="getStatusClass(order.order_status)">
               {{ getStatusText(order.order_status, order.payment_status) }}
@@ -75,6 +80,12 @@
           </view>
         </view>
 
+        <!-- 收货信息 -->
+        <view class="receiver-info" v-if="order.receiver_name">
+          <text class="receiver-label">收货人：</text>
+          <text class="receiver-text">{{ order.receiver_name }} {{ order.receiver_phone }}</text>
+        </view>
+
         <!-- 订单底部 -->
         <view class="order-footer">
           <text class="order-time">{{ formatTime(order.created_at) }}</text>
@@ -89,7 +100,6 @@
     <!-- 空订单 -->
     <view class="empty-orders" v-else>
       <text class="empty-text">暂无订单</text>
-      <view class="empty-btn" @click="handleGoShopping">去逛逛</view>
     </view>
 
     <!-- 加载更多 -->
@@ -103,10 +113,10 @@
 </template>
 
 <script lang="ts">
-import { ref, onMounted } from "vue";
+import { ref } from "vue";
 import { onLoad, onReachBottom } from "@dcloudio/uni-app";
-import { getOrders } from "@/api/order";
-import { getUserId, isLoggedIn } from "@/api/auth";
+import { getAllOrders } from "@/api/order";
+import { isLoggedIn } from "@/api/auth";
 import type { Orders, Orders_Order_By } from "@/types/graphql";
 import { Order_By } from "@/types/graphql";
 
@@ -120,7 +130,7 @@ export default {
     const selectedStatus = ref<string | null>(null);
     const selectedPaymentStatus = ref<string | null>(null);
 
-    // 状态标签（只保留4种订单状态）
+    // 状态标签
     const statusTabs = [
       { label: "全部", value: null },
       { label: "待确认", value: "pending" },
@@ -202,18 +212,16 @@ export default {
 
     // 加载订单列表
     const loadOrders = async (refresh = false) => {
-      if (loading.value) return;
-
-      // 检查登录状态
-      if (!isLoggedIn()) {
-        uni.navigateTo({
-          url: "/pages/login/index",
-        });
+      console.log("[订单管理] 开始加载订单, refresh:", refresh);
+      
+      if (loading.value) {
+        console.log("[订单管理] 正在加载中，跳过");
         return;
       }
 
-      const userId = getUserId();
-      if (!userId) {
+      // 检查登录状态
+      if (!isLoggedIn()) {
+        console.log("[订单管理] 未登录，跳转到登录页");
         uni.navigateTo({
           url: "/pages/login/index",
         });
@@ -223,6 +231,7 @@ export default {
       loading.value = true;
       try {
         const currentPage = refresh ? 1 : page.value;
+        console.log("[订单管理] 当前页码:", currentPage, "选中状态:", selectedStatus.value);
 
         const orderBy: Orders_Order_By[] = [
           {
@@ -230,13 +239,15 @@ export default {
           },
         ] as any;
 
-        const result = await getOrders(userId, {
+        const result = await getAllOrders({
           order_status: selectedStatus.value,
           payment_status: selectedStatus.value === "pending" ? selectedPaymentStatus.value : null,
           order_by: orderBy,
           limit: pageSize,
           offset: (currentPage - 1) * pageSize,
         });
+
+        console.log("[订单管理] 获取到订单数量:", result.length);
 
         if (refresh) {
           orders.value = result;
@@ -250,7 +261,7 @@ export default {
           page.value++;
         }
       } catch (error) {
-        console.error("加载订单失败:", error);
+        console.error("[订单管理] 加载订单失败:", error);
         uni.showToast({
           title: "加载失败",
           icon: "none",
@@ -278,20 +289,14 @@ export default {
 
     // 处理订单点击
     const handleOrderClick = (order: Orders) => {
-      // 跳转到订单结算页（订单详情页）
+      // 跳转到订单分享页面（客态页面）
       uni.navigateTo({
-        url: `/pages/order-payment/index?id=${order.id}`,
-      });
-    };
-
-    // 去逛逛
-    const handleGoShopping = () => {
-      uni.switchTab({
-        url: "/pages/index/index",
+        url: `/pages/order-share/index?id=${order.id}`,
       });
     };
 
     onLoad(() => {
+      console.log("[订单管理] 页面加载");
       loadOrders(true);
     });
 
@@ -319,7 +324,6 @@ export default {
       handleStatusClick,
       handlePaymentStatusClick,
       handleOrderClick,
-      handleGoShopping,
     };
   },
 };
@@ -426,10 +430,16 @@ export default {
 .order-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   padding-bottom: 20rpx;
   border-bottom: 1rpx solid #f5f5f5;
   margin-bottom: 20rpx;
+}
+
+.order-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
 }
 
 .order-number {
@@ -437,10 +447,16 @@ export default {
   color: #666;
 }
 
+.user-info {
+  font-size: 24rpx;
+  color: #999;
+}
+
 .status-container {
   display: flex;
   align-items: center;
   gap: 12rpx;
+  flex-wrap: wrap;
 }
 
 .order-status {
@@ -572,6 +588,24 @@ export default {
   font-weight: bold;
 }
 
+/* 收货信息 */
+.receiver-info {
+  padding: 16rpx 0;
+  margin-bottom: 16rpx;
+  border-top: 1rpx solid #f5f5f5;
+  border-bottom: 1rpx solid #f5f5f5;
+  font-size: 24rpx;
+  color: #666;
+}
+
+.receiver-label {
+  color: #999;
+}
+
+.receiver-text {
+  color: #333;
+}
+
 /* 订单底部 */
 .order-footer {
   display: flex;
@@ -615,15 +649,6 @@ export default {
 .empty-text {
   font-size: 28rpx;
   color: #999;
-  margin-bottom: 40rpx;
-}
-
-.empty-btn {
-  background-color: #3cc51f;
-  color: #fff;
-  padding: 20rpx 60rpx;
-  border-radius: 40rpx;
-  font-size: 28rpx;
 }
 
 /* 加载更多 */

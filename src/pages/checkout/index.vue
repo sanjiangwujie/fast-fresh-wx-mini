@@ -25,17 +25,32 @@
       <!-- 收货信息 -->
       <view class="section">
         <view class="section-title">收货信息</view>
-        <view class="form-item">
-          <text class="form-label">收货人 <text class="required">*</text></text>
-          <input class="form-input" v-model="addressForm.receiver_name" placeholder="请输入收货人姓名" maxlength="20" />
-        </view>
-        <view class="form-item">
-          <text class="form-label">联系电话 <text class="required">*</text></text>
-          <input class="form-input" v-model="addressForm.receiver_phone" type="number" placeholder="请输入联系电话" maxlength="11" />
-        </view>
-        <view class="form-item">
-          <text class="form-label">详细地址 <text class="required">*</text></text>
-          <textarea class="form-textarea" v-model="addressForm.detail_address" placeholder="请输入详细地址（包含省市区街道门牌号等）" maxlength="200" />
+        <view class="address-selector" @click="handleSelectAddress" :class="{ 'has-address': selectedAddress }">
+          <view class="address-content" v-if="selectedAddress">
+            <view class="address-header">
+              <view class="receiver-info">
+                <text class="receiver-name">{{ selectedAddress.receiver_name }}</text>
+                <text class="receiver-phone">{{ selectedAddress.receiver_phone }}</text>
+                <view class="default-badge" v-if="selectedAddress.is_default">
+                  <text class="default-badge-text">默认</text>
+                </view>
+              </view>
+              <view class="address-action-hint">
+                <text class="hint-text">点击切换</text>
+                <text class="hint-icon">›</text>
+              </view>
+            </view>
+            <view class="address-detail">
+              <text class="address-text">{{ selectedAddress.receiver_address }}</text>
+            </view>
+          </view>
+          <view class="address-placeholder" v-else>
+            <view class="placeholder-content">
+              <text class="placeholder-icon">📍</text>
+              <text class="placeholder-text">请选择收货地址</text>
+            </view>
+            <text class="placeholder-arrow">›</text>
+          </view>
         </view>
       </view>
 
@@ -92,10 +107,12 @@
 
 <script lang="ts">
 import { ref, computed, onMounted } from "vue";
-import { onLoad } from "@dcloudio/uni-app";
+import { onLoad, onShow } from "@dcloudio/uni-app";
 import { getCarts } from "@/api/cart";
 import { createOrder } from "@/api/order";
-import type { Carts } from "@/types/graphql";
+import { getAddresses } from "@/api/address";
+import { getUserId, getUserInfo, isLoggedIn } from "@/api/auth";
+import type { Carts, Addresses } from "@/types/graphql";
 
 interface DeliveryAddress {
   receiver_name: string;
@@ -113,12 +130,7 @@ export default {
     const freightAmount = ref(0); // 运费，默认0
     const discountAmount = ref(0); // 优惠金额，默认0
     const submitting = ref(false);
-    
-    const addressForm = ref({
-      receiver_name: "",
-      receiver_phone: "",
-      detail_address: "",
-    });
+    const selectedAddress = ref<Addresses | null>(null);
 
     // 计算商品总价
     const totalAmount = computed(() => {
@@ -143,9 +155,23 @@ export default {
 
     // 加载购物车数据
     const loadCartItems = async () => {
+      // 检查登录状态
+      if (!isLoggedIn()) {
+        uni.navigateTo({
+          url: "/pages/login/index",
+        });
+        return;
+      }
+
+      const userId = getUserId();
+      if (!userId) {
+        uni.navigateTo({
+          url: "/pages/login/index",
+        });
+        return;
+      }
+
       try {
-        // TODO: 获取当前用户ID
-        const userId = "1"; // 临时使用固定用户ID
         const allCarts = await getCarts(userId);
         // 只加载选中的商品
         cartItems.value = allCarts.filter((item) => item.is_selected);
@@ -168,49 +194,58 @@ export default {
       }
     };
 
+    // 加载默认收货地址
+    const loadDefaultAddress = async () => {
+      if (!isLoggedIn()) return;
+
+      const userId = getUserId();
+      if (!userId) return;
+
+      try {
+        const addresses = await getAddresses(userId);
+        // 优先选择默认地址，否则选择第一个
+        const defaultAddr = addresses.find(addr => addr.is_default) || addresses[0];
+        if (defaultAddr) {
+          selectedAddress.value = defaultAddr;
+        }
+      } catch (error) {
+        console.error("加载收货地址失败:", error);
+      }
+    };
+
+    // 检查是否有从地址管理页面返回的选中地址
+    const checkSelectedAddress = () => {
+      const storedAddress = uni.getStorageSync("selectedAddress");
+      if (storedAddress) {
+        selectedAddress.value = storedAddress;
+        uni.removeStorageSync("selectedAddress");
+      }
+    };
+
+    // 选择收货地址
+    const handleSelectAddress = () => {
+      uni.navigateTo({
+        url: "/pages/address-manage/index",
+      });
+    };
+
     // 验证收货信息
-    const validateAddressForm = (): DeliveryAddress | null => {
-      // 验证收货人姓名
-      if (!addressForm.value.receiver_name || addressForm.value.receiver_name.trim() === "") {
+    const validateAddress = (): DeliveryAddress | null => {
+      if (!selectedAddress.value) {
         uni.showToast({
-          title: "请输入收货人姓名",
-          icon: "none",
-        });
-        return null;
-      }
-
-      // 验证联系电话
-      if (!addressForm.value.receiver_phone || addressForm.value.receiver_phone.trim() === "") {
-        uni.showToast({
-          title: "请输入联系电话",
-          icon: "none",
-        });
-        return null;
-      }
-
-      // 验证手机号格式（简单验证）
-      const phoneRegex = /^1[3-9]\d{9}$/;
-      if (!phoneRegex.test(addressForm.value.receiver_phone)) {
-        uni.showToast({
-          title: "请输入正确的手机号码",
-          icon: "none",
-        });
-        return null;
-      }
-
-      // 验证详细地址
-      if (!addressForm.value.detail_address || addressForm.value.detail_address.trim() === "") {
-        uni.showToast({
-          title: "请输入详细地址",
+          title: "请选择收货地址",
           icon: "none",
         });
         return null;
       }
 
       return {
-        receiver_name: addressForm.value.receiver_name.trim(),
-        receiver_phone: addressForm.value.receiver_phone.trim(),
-        detail_address: addressForm.value.detail_address.trim(),
+        receiver_name: selectedAddress.value.receiver_name,
+        receiver_phone: selectedAddress.value.receiver_phone,
+        detail_address: selectedAddress.value.receiver_address,
+        receiver_province: selectedAddress.value.receiver_province || undefined,
+        receiver_city: selectedAddress.value.receiver_city || undefined,
+        receiver_district: selectedAddress.value.receiver_district || undefined,
       };
     };
 
@@ -228,16 +263,33 @@ export default {
       }
 
       // 验证收货信息
-      const deliveryAddress = validateAddressForm();
+      const deliveryAddress = validateAddress();
       if (!deliveryAddress) {
         return;
       }
 
+      // 检查登录状态
+      if (!isLoggedIn()) {
+        uni.navigateTo({
+          url: "/pages/login/index",
+        });
+        return;
+      }
+
+      const userId = getUserId();
+      if (!userId) {
+        uni.navigateTo({
+          url: "/pages/login/index",
+        });
+        return;
+      }
+
+      // 调试日志：确认用户ID
+      console.log("[下单调试] 当前用户ID:", userId);
+      console.log("[下单调试] 用户信息:", getUserInfo());
+
       submitting.value = true;
       try {
-        // TODO: 获取当前用户ID
-        const userId = "1"; // 临时使用固定用户ID
-
         const order = await createOrder({
           userId,
           cartItems: cartItems.value,
@@ -271,8 +323,13 @@ export default {
       }
     };
 
-    onLoad(() => {
+    onMounted(() => {
       loadCartItems();
+      loadDefaultAddress();
+    });
+
+    onShow(() => {
+      checkSelectedAddress();
     });
 
     return {
@@ -282,10 +339,11 @@ export default {
       discountAmount,
       totalAmount,
       actualAmount,
+      selectedAddress,
       submitting,
       calculateItemTotal,
+      handleSelectAddress,
       handleSubmitOrder,
-      addressForm,
     };
   },
 };
@@ -400,17 +458,29 @@ export default {
 }
 
 /* 收货地址 */
-.address-card {
-  display: flex;
-  align-items: center;
-  padding: 30rpx;
-  background-color: #f9f9f9;
-  border-radius: 12rpx;
-  border: 1rpx solid #eee;
+.address-selector {
+  background-color: #fff;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.05);
+  transition: all 0.3s ease;
+  position: relative;
+  border: 2rpx solid transparent;
+}
+
+.address-selector.has-address {
+  border: 2rpx solid #ff9500;
+  background: linear-gradient(135deg, #fff9f0 0%, #ffffff 100%);
+  box-shadow: 0 4rpx 12rpx rgba(255, 149, 0, 0.15);
+}
+
+.address-selector.has-address:active {
+  transform: scale(0.98);
+  box-shadow: 0 2rpx 8rpx rgba(255, 149, 0, 0.2);
 }
 
 .address-content {
-  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 12rpx;
@@ -419,12 +489,20 @@ export default {
 .address-header {
   display: flex;
   align-items: center;
-  gap: 20rpx;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.receiver-info {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  flex: 1;
 }
 
 .receiver-name {
-  font-size: 28rpx;
-  font-weight: bold;
+  font-size: 30rpx;
+  font-weight: 500;
   color: #333;
 }
 
@@ -433,18 +511,63 @@ export default {
   color: #666;
 }
 
+.default-badge {
+  padding: 4rpx 12rpx;
+  background: linear-gradient(135deg, #ff9500 0%, #ff6b00 100%);
+  border-radius: 8rpx;
+}
+
+.default-badge-text {
+  font-size: 20rpx;
+  color: #fff;
+  font-weight: 500;
+}
+
+.address-action-hint {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  padding: 8rpx 16rpx;
+  background-color: rgba(255, 149, 0, 0.1);
+  border-radius: 20rpx;
+}
+
+.hint-text {
+  font-size: 24rpx;
+  color: #ff9500;
+}
+
+.hint-icon {
+  font-size: 28rpx;
+  color: #ff9500;
+  font-weight: bold;
+}
+
 .address-detail {
-  font-size: 26rpx;
-  color: #666;
+  margin-top: 8rpx;
+}
+
+.address-text {
+  font-size: 28rpx;
+  color: #333;
   line-height: 1.6;
 }
 
 .address-placeholder {
-  flex: 1;
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 40rpx 0;
+  justify-content: space-between;
+  padding: 20rpx 0;
+}
+
+.placeholder-content {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.placeholder-icon {
+  font-size: 36rpx;
 }
 
 .placeholder-text {
@@ -452,10 +575,9 @@ export default {
   color: #999;
 }
 
-.address-arrow {
+.placeholder-arrow {
   font-size: 32rpx;
   color: #999;
-  margin-left: 20rpx;
 }
 
 /* 订单备注 */

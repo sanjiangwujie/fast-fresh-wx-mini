@@ -31,6 +31,7 @@ export const getOrders = async (
   userId: string | number,
   args: {
     order_status?: string | null;
+    payment_status?: string | null;
     order_by?: Orders_Order_By[];
     limit?: number;
     offset?: number;
@@ -44,6 +45,10 @@ export const getOrders = async (
 
   if (args.order_status) {
     whereConditions.order_status = { _eq: args.order_status };
+  }
+
+  if (args.payment_status) {
+    whereConditions.payment_status = { _eq: args.payment_status };
   }
 
   const query = `
@@ -65,6 +70,95 @@ export const getOrders = async (
         payment_voucher_url
         created_at
         updated_at
+        order_products {
+          id
+          product_name
+          product_image_url
+          product_unit
+          quantity
+          unit_price
+          total_price
+        }
+      }
+    }
+  `;
+
+  const orderBy: Orders_Order_By[] = args.order_by || [
+    {
+      created_at: "desc" as any,
+    },
+  ];
+
+  const result = await client.execute<{ orders: Orders[] }>({
+    query,
+    variables: {
+      where: whereConditions,
+      order_by: orderBy,
+      limit: args.limit || 20,
+      offset: args.offset || 0,
+    },
+  });
+
+  return result.orders || [];
+};
+
+/**
+ * 获取所有订单列表（运营人员使用，不限制用户ID）
+ * @param args 查询参数
+ * @returns 订单列表（包含 order_products 和用户信息）
+ */
+export const getAllOrders = async (
+  args: {
+    order_status?: string | null;
+    payment_status?: string | null;
+    order_by?: Orders_Order_By[];
+    limit?: number;
+    offset?: number;
+  } = {}
+): Promise<Orders[]> => {
+  // 构建 where 条件
+  const whereConditions: any = {
+    is_deleted: { _eq: false },
+  };
+
+  if (args.order_status) {
+    whereConditions.order_status = { _eq: args.order_status };
+  }
+
+  if (args.payment_status) {
+    whereConditions.payment_status = { _eq: args.payment_status };
+  }
+
+  const query = `
+    query GetAllOrders($where: orders_bool_exp!, $order_by: [orders_order_by!], $limit: Int, $offset: Int) {
+      orders(
+        where: $where
+        order_by: $order_by
+        limit: $limit
+        offset: $offset
+      ) {
+        id
+        order_status
+        payment_status
+        total_amount
+        discount_amount
+        freight_amount
+        actual_amount
+        remark
+        payment_voucher_url
+        receiver_name
+        receiver_phone
+        receiver_address
+        receiver_province
+        receiver_city
+        receiver_district
+        created_at
+        updated_at
+        user {
+          id
+          phone
+          nickname
+        }
         order_products {
           id
           product_name
@@ -128,6 +222,7 @@ export const getOrderById = async (orderId: string | number): Promise<Orders | n
         updated_at
         order_products {
           id
+          product_products
           product_name
           product_image_url
           product_unit
@@ -161,6 +256,26 @@ export const getOrderById = async (orderId: string | number): Promise<Orders | n
  */
 export const createOrder = async (params: CreateOrderParams): Promise<Orders | null> => {
   const { userId, cartItems, deliveryAddress, remark, totalAmount, freightAmount = 0, discountAmount = 0, actualAmount } = params;
+  
+  // 检查商品状态：不能包含已删除或已下架的商品
+  for (const cartItem of cartItems) {
+    const product = cartItem.product;
+    if (!product) {
+      throw new Error(`商品不存在（购物车项ID: ${cartItem.id}）`);
+    }
+    
+    if (product.is_deleted) {
+      throw new Error(`商品"${product.name}"已删除，无法下单`);
+    }
+    
+    if (product.is_off_shelf) {
+      throw new Error(`商品"${product.name}"已下架，无法下单`);
+    }
+  }
+  
+  // 调试日志：确认传入的用户ID
+  console.log("[创建订单] 传入的用户ID:", userId);
+  console.log("[创建订单] 用户ID类型:", typeof userId);
 
   // 构建订单商品数据
   const orderProducts = cartItems.map((item) => {
@@ -243,10 +358,19 @@ export const createOrder = async (params: CreateOrderParams): Promise<Orders | n
     }
   `;
 
+  // 调试日志：确认发送到服务器的变量
+  const userUsersValue = Number(userId);
+  console.log("[创建订单] 发送到服务器的 user_users 值:", userUsersValue);
+  console.log("[创建订单] 订单变量:", {
+    user_users: userUsersValue,
+    total_amount: totalAmount,
+    actual_amount: actualAmount,
+  });
+
   const result = await client.execute<{ insert_orders_one: Orders | null }>({
     query: mutation,
     variables: {
-      user_users: Number(userId),
+      user_users: userUsersValue,
       total_amount: totalAmount,
       freight_amount: freightAmount,
       discount_amount: discountAmount,
@@ -261,6 +385,12 @@ export const createOrder = async (params: CreateOrderParams): Promise<Orders | n
       order_products: orderProducts,
     },
   });
+
+  // 调试日志：确认创建的订单
+  console.log("[创建订单] 订单创建结果:", result.insert_orders_one);
+  if (result.insert_orders_one) {
+    console.log("[创建订单] 订单ID:", result.insert_orders_one.id);
+  }
 
   return result.insert_orders_one || null;
 };
@@ -320,4 +450,142 @@ export const updateOrderPaymentVoucher = async (
   });
 
   return result.update_orders_by_pk || null;
+};
+
+/**
+ * 确认订单（运营人员使用）
+ * 功能：
+ * 1. 校验库存（检查每个商品的库存是否足够）
+ * 2. 锁库存（减少库存）
+ * 3. 更新订单状态为 confirmed
+ * @param orderId 订单ID
+ * @returns 更新后的订单
+ */
+export const confirmOrder = async (orderId: string | number): Promise<Orders | null> => {
+  // 先获取订单详情，包括订单商品
+  const orderDetail = await getOrderById(orderId);
+  if (!orderDetail) {
+    throw new Error("订单不存在");
+  }
+
+  // 检查订单状态
+  if (orderDetail.order_status !== "pending") {
+    throw new Error("订单状态不正确，只能确认待确认状态的订单");
+  }
+
+  // 检查支付状态
+  if (orderDetail.payment_status !== "paid" && orderDetail.payment_status !== "approved") {
+    throw new Error("订单尚未支付，无法确认");
+  }
+
+  // 校验库存并锁库存
+  const stockUpdates: Array<{ productId: number; quantity: number; productName: string }> = [];
+  
+  for (const orderProduct of orderDetail.order_products) {
+    const productId = Number(orderProduct.product_products);
+    const quantity = Number(orderProduct.quantity);
+    
+    // 查询商品当前库存
+    const productQuery = `
+      query GetProductStock($id: bigint!) {
+        products_by_pk(id: $id) {
+          id
+          unit_stock
+          name
+        }
+      }
+    `;
+    
+    const productResult = await client.execute<{ products_by_pk: { id: number; unit_stock: number | null; name: string | null } | null }>({
+      query: productQuery,
+      variables: { id: productId },
+    });
+
+    if (!productResult.products_by_pk) {
+      throw new Error(`商品不存在: ${orderProduct.product_name || productId}`);
+    }
+
+    const currentStock = Number(productResult.products_by_pk.unit_stock || 0);
+    
+    // 校验库存
+    if (currentStock < quantity) {
+      throw new Error(`商品"${orderProduct.product_name || productResult.products_by_pk.name || '未知'}"库存不足，当前库存: ${currentStock}，需要: ${quantity}`);
+    }
+
+    stockUpdates.push({ 
+      productId, 
+      quantity,
+      productName: orderProduct.product_name || productResult.products_by_pk.name || '未知'
+    });
+  }
+
+  // 先更新每个商品的库存（减少库存）
+  for (const { productId, quantity } of stockUpdates) {
+    const stockMutation = `
+      mutation UpdateProductStock($id: bigint!, $quantity: bigint!) {
+        update_products_by_pk(
+          pk_columns: { id: $id }
+          _inc: { unit_stock: $quantity }
+        ) {
+          id
+          unit_stock
+        }
+      }
+    `;
+
+    // 注意：这里使用负数来减少库存
+    await client.execute({
+      query: stockMutation,
+      variables: {
+        id: productId,
+        quantity: -quantity, // 负数表示减少
+      },
+    });
+  }
+
+  // 然后更新订单状态
+  const orderMutation = `
+    mutation ConfirmOrder($orderId: bigint!) {
+      update_orders_by_pk(
+        pk_columns: { id: $orderId }
+        _set: { order_status: "confirmed" }
+      ) {
+        id
+        order_status
+        payment_status
+        total_amount
+        discount_amount
+        freight_amount
+        actual_amount
+        remark
+        payment_voucher_url
+        receiver_name
+        receiver_phone
+        receiver_address
+        receiver_province
+        receiver_city
+        receiver_district
+        created_at
+        updated_at
+        order_products {
+          id
+          product_name
+          product_image_url
+          product_unit
+          quantity
+          unit_price
+          total_price
+        }
+      }
+    }
+  `;
+
+  const orderResult = await client.execute<{ update_orders_by_pk: Orders | null }>({
+    query: orderMutation,
+    variables: {
+      orderId: Number(orderId),
+    },
+  });
+
+  return orderResult.update_orders_by_pk || null;
 };

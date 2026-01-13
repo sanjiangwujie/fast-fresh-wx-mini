@@ -103,11 +103,58 @@
       </view>
 
       <!-- 未支付提示 -->
-      <view class="section card" v-if="!order?.payment_voucher_url && order?.payment_status === 'pending'">
+      <view class="section card" v-if="!order?.payment_voucher_url && order?.payment_status === 'pending' && !isOperator">
         <view class="no-payment">
           <text class="no-payment-icon">⚠️</text>
           <text class="no-payment-text">该订单尚未上传付款截图</text>
           <text class="no-payment-tip">（此页面为查看页面，如需上传截图请前往订单结算页面）</text>
+        </view>
+      </view>
+
+      <!-- 运营人员操作区域 -->
+      <view class="section card" v-if="isOperator">
+        <view class="operator-actions">
+          <!-- 未支付状态：运营人员可以确认付款 -->
+          <view v-if="order?.payment_status === 'pending' || order?.payment_status === 'submitted'">
+            <view class="operator-title">运营操作</view>
+            <view class="operator-tip">该订单尚未支付，您可以代为确认付款</view>
+            
+            <!-- 上传付款截图（可选） -->
+            <view class="upload-section" v-if="!operatorPaymentVoucherUrl && !operatorUploading">
+              <view class="upload-btn" @click="handleOperatorChooseImage">
+                <text class="upload-btn-text">上传付款截图（可选）</text>
+              </view>
+            </view>
+            
+            <view class="image-preview" v-if="operatorPaymentVoucherUrl">
+              <image class="preview-image" :src="operatorPaymentVoucherUrl" mode="aspectFit" @click="handleOperatorPreviewImage" />
+              <view class="image-actions">
+                <view class="action-btn" @click="handleOperatorChooseImage" :class="{ disabled: operatorUploading }">重新上传</view>
+                <view class="action-btn delete" @click="handleOperatorDeleteImage" :class="{ disabled: operatorUploading }">删除</view>
+              </view>
+            </view>
+            
+            <!-- 上传进度 -->
+            <view class="upload-progress" v-if="operatorUploading">
+              <view class="progress-bar">
+                <view class="progress-fill" :style="{ width: operatorUploadProgress + '%' }"></view>
+              </view>
+              <text class="progress-text">{{ operatorUploadProgress }}%</text>
+            </view>
+            
+            <view class="confirm-btn" @click="handleOperatorConfirmPayment" :class="{ disabled: operatorSubmitting || operatorUploading }">
+              <text class="confirm-btn-text">{{ operatorSubmitting ? "提交中..." : "确认付款" }}</text>
+            </view>
+          </view>
+          
+          <!-- 待确认且已支付状态：运营人员可以确认订单 -->
+          <view v-else-if="order?.order_status === 'pending' && (order?.payment_status === 'paid' || order?.payment_status === 'approved')">
+            <view class="operator-title">运营操作</view>
+            <view class="operator-tip">订单已支付，确认后将锁定库存</view>
+            <view class="confirm-btn" @click="handleOperatorConfirmOrder" :class="{ disabled: operatorSubmitting }">
+              <text class="confirm-btn-text">{{ operatorSubmitting ? "确认中..." : "确认订单" }}</text>
+            </view>
+          </view>
         </view>
       </view>
 
@@ -118,9 +165,12 @@
 </template>
 
 <script lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { onLoad, onShareAppMessage } from "@dcloudio/uni-app";
-import { getOrderById } from "@/api/order";
+import { getOrderById, updateOrderPaymentVoucher, confirmOrder } from "@/api/order";
+import { getUserRoles } from "@/api/user";
+import { getUserId, isLoggedIn } from "@/api/auth";
+import { uploadToQiniu } from "@/api/upload";
 import type { Orders } from "@/types/graphql";
 
 export default {
@@ -128,6 +178,13 @@ export default {
     const order = ref<Orders | null>(null);
     const orderId = ref<string | number>("");
     const loading = ref(false);
+    const isOperator = ref(false);
+    
+    // 运营人员上传付款截图相关
+    const operatorPaymentVoucherUrl = ref<string>("");
+    const operatorUploading = ref(false);
+    const operatorUploadProgress = ref(0);
+    const operatorSubmitting = ref(false);
 
     // 获取支付状态文本
     const getPaymentStatusText = (status: string | null | undefined) => {
@@ -179,6 +236,25 @@ export default {
       }
     };
 
+    // 检查用户是否是运营人员
+    const checkOperatorRole = async () => {
+      if (!isLoggedIn()) {
+        isOperator.value = false;
+        return;
+      }
+
+      try {
+        const userId = getUserId();
+        if (userId) {
+          const roles = await getUserRoles(userId);
+          isOperator.value = roles.some((role) => role.role_type === "operator");
+        }
+      } catch (error) {
+        console.error("检查用户角色失败:", error);
+        isOperator.value = false;
+      }
+    };
+
     // 加载订单详情
     const loadOrderDetail = async () => {
       if (!orderId.value) return;
@@ -188,6 +264,10 @@ export default {
         const orderData = await getOrderById(orderId.value);
         if (orderData) {
           order.value = orderData;
+          // 如果订单已有付款截图，运营人员也可以看到
+          if (orderData.payment_voucher_url && isOperator.value) {
+            operatorPaymentVoucherUrl.value = orderData.payment_voucher_url;
+          }
         } else {
           uni.showToast({
             title: "订单不存在",
@@ -203,6 +283,138 @@ export default {
       } finally {
         loading.value = false;
       }
+    };
+
+    // 运营人员选择图片
+    const handleOperatorChooseImage = () => {
+      uni.chooseImage({
+        count: 1,
+        sizeType: ["compressed"],
+        sourceType: ["album", "camera"],
+        success: async (res) => {
+          const tempFilePath = res.tempFilePaths[0];
+          await handleOperatorUploadImage(tempFilePath);
+        },
+        fail: (err) => {
+          console.error("选择图片失败:", err);
+          uni.showToast({
+            title: "选择图片失败",
+            icon: "none",
+          });
+        },
+      });
+    };
+
+    // 运营人员上传图片
+    const handleOperatorUploadImage = async (filePath: string) => {
+      operatorUploading.value = true;
+      operatorUploadProgress.value = 0;
+      
+      try {
+        const { task, url } = await uploadToQiniu(filePath, (progress) => {
+          operatorUploadProgress.value = progress;
+        });
+
+        operatorPaymentVoucherUrl.value = url;
+        operatorUploadProgress.value = 100;
+        
+        uni.showToast({
+          title: "上传成功",
+          icon: "success",
+        });
+      } catch (error) {
+        console.error("上传图片失败:", error);
+        operatorUploadProgress.value = 0;
+        uni.showToast({
+          title: error instanceof Error ? error.message : "上传失败",
+          icon: "none",
+        });
+      } finally {
+        operatorUploading.value = false;
+      }
+    };
+
+    // 运营人员预览图片
+    const handleOperatorPreviewImage = () => {
+      if (operatorPaymentVoucherUrl.value) {
+        uni.previewImage({
+          urls: [operatorPaymentVoucherUrl.value],
+          current: operatorPaymentVoucherUrl.value,
+        });
+      }
+    };
+
+    // 运营人员删除图片
+    const handleOperatorDeleteImage = () => {
+      uni.showModal({
+        title: "确认删除",
+        content: "确定要删除这张付款截图吗？",
+        success: (res) => {
+          if (res.confirm) {
+            operatorPaymentVoucherUrl.value = "";
+          }
+        },
+      });
+    };
+
+    // 运营人员确认付款
+    const handleOperatorConfirmPayment = async () => {
+      if (operatorSubmitting.value || operatorUploading.value) return;
+
+      operatorSubmitting.value = true;
+      try {
+        await updateOrderPaymentVoucher(orderId.value, operatorPaymentVoucherUrl.value || null);
+        
+        uni.showToast({
+          title: "付款已确认",
+          icon: "success",
+        });
+
+        // 刷新订单信息
+        await loadOrderDetail();
+      } catch (error) {
+        console.error("确认付款失败:", error);
+        uni.showToast({
+          title: error instanceof Error ? error.message : "确认失败",
+          icon: "none",
+        });
+      } finally {
+        operatorSubmitting.value = false;
+      }
+    };
+
+    // 运营人员确认订单
+    const handleOperatorConfirmOrder = async () => {
+      if (operatorSubmitting.value) return;
+
+      uni.showModal({
+        title: "确认订单",
+        content: "确认后将锁定库存，是否继续？",
+        success: async (res) => {
+          if (res.confirm) {
+            operatorSubmitting.value = true;
+            try {
+              await confirmOrder(orderId.value);
+              
+              uni.showToast({
+                title: "订单已确认",
+                icon: "success",
+              });
+
+              // 刷新订单信息
+              await loadOrderDetail();
+            } catch (error) {
+              console.error("确认订单失败:", error);
+              uni.showToast({
+                title: error instanceof Error ? error.message : "确认失败",
+                icon: "none",
+              });
+            } finally {
+              operatorSubmitting.value = false;
+            }
+          }
+        },
+      });
     };
 
     // 小程序分享配置
@@ -221,10 +433,13 @@ export default {
       };
     });
 
-    onLoad((options: any) => {
+    onLoad(async (options: any) => {
       if (options.id) {
         orderId.value = options.id;
-        loadOrderDetail();
+        // 先检查用户角色
+        await checkOperatorRole();
+        // 然后加载订单详情
+        await loadOrderDetail();
       } else {
         uni.showToast({
           title: "订单ID缺失",
@@ -236,11 +451,21 @@ export default {
     return {
       order,
       loading,
+      isOperator,
+      operatorPaymentVoucherUrl,
+      operatorUploading,
+      operatorUploadProgress,
+      operatorSubmitting,
       getPaymentStatusText,
       getStatusClass,
       formatTime,
       formatPrice,
       handlePreviewImage,
+      handleOperatorChooseImage,
+      handleOperatorPreviewImage,
+      handleOperatorDeleteImage,
+      handleOperatorConfirmPayment,
+      handleOperatorConfirmOrder,
     };
   },
 };
@@ -489,5 +714,132 @@ export default {
   font-size: 24rpx;
   color: #ccc;
   text-align: center;
+}
+
+/* 运营人员操作区域 */
+.operator-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+}
+
+.operator-title {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 8rpx;
+}
+
+.operator-tip {
+  font-size: 26rpx;
+  color: #666;
+  line-height: 1.6;
+}
+
+.upload-section {
+  margin: 16rpx 0;
+}
+
+.upload-btn {
+  padding: 20rpx 0;
+  background-color: #f5f5f5;
+  border-radius: 8rpx;
+  text-align: center;
+  border: 1rpx dashed #d0d0d0;
+}
+
+.upload-btn-text {
+  font-size: 28rpx;
+  color: #666;
+}
+
+.image-preview {
+  position: relative;
+  margin: 16rpx 0;
+}
+
+.preview-image {
+  width: 100%;
+  max-height: 600rpx;
+  border-radius: 12rpx;
+}
+
+.image-actions {
+  display: flex;
+  gap: 20rpx;
+  margin-top: 20rpx;
+}
+
+.action-btn {
+  flex: 1;
+  padding: 20rpx 0;
+  text-align: center;
+  background-color: #f5f5f5;
+  border-radius: 8rpx;
+  font-size: 28rpx;
+  color: #333;
+}
+
+.action-btn.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.action-btn.delete {
+  background-color: #fff4e6;
+  color: #ff9500;
+}
+
+/* 上传进度 */
+.upload-progress {
+  margin: 16rpx 0;
+  padding: 20rpx;
+  background-color: #f5f5f5;
+  border-radius: 8rpx;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8rpx;
+  background-color: #e0e0e0;
+  border-radius: 4rpx;
+  overflow: hidden;
+  margin-bottom: 12rpx;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3cc51f 0%, #2ea517 100%);
+  border-radius: 4rpx;
+  transition: width 0.3s ease;
+}
+
+.progress-text {
+  display: block;
+  text-align: center;
+  font-size: 24rpx;
+  color: #666;
+}
+
+/* 确认按钮 */
+.confirm-btn {
+  padding: 28rpx 0;
+  background: linear-gradient(135deg, #3cc51f 0%, #2ea517 100%);
+  border-radius: 12rpx;
+  text-align: center;
+  box-shadow: 0 4rpx 12rpx rgba(60, 197, 31, 0.3);
+  margin-top: 8rpx;
+}
+
+.confirm-btn.disabled {
+  background-color: #ccc;
+  box-shadow: none;
+  opacity: 0.6;
+}
+
+.confirm-btn-text {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #fff;
 }
 </style>

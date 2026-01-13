@@ -22,10 +22,21 @@
             @click="handleGoToProductDetail(item)"
           />
           <view class="cart-item-info" @click="handleGoToProductDetail(item)">
-            <text class="cart-item-name">{{ item.product?.name || "" }}</text>
+            <view class="cart-item-name-row">
+              <text class="cart-item-name">{{ item.product?.name || "" }}</text>
+              <view class="cart-status-badge off-shelf" v-if="item.product?.is_off_shelf">
+                <text class="badge-text">已下架</text>
+              </view>
+              <view class="cart-status-badge deleted" v-if="item.product?.is_deleted">
+                <text class="badge-text">已删除</text>
+              </view>
+            </view>
             <view class="cart-item-price-row">
               <text class="cart-item-price">¥{{ item.product?.unit_price || 0 }}</text>
               <text class="cart-item-unit" v-if="item.product?.unit">/{{ item.product.unit }}</text>
+            </view>
+            <view class="cart-item-status-tip" v-if="item.product?.is_off_shelf || item.product?.is_deleted">
+              <text class="tip-text">该商品无法购买，请移除</text>
             </view>
           </view>
           <view class="cart-item-actions">
@@ -77,8 +88,9 @@
 
 <script lang="ts">
 import { ref, computed, onMounted } from "vue";
-import { onLoad, onPullDownRefresh, onShow } from "@dcloudio/uni-app";
+import { onLoad, onShow } from "@dcloudio/uni-app";
 import { getCarts, deleteCart, deleteCarts, updateCartQuantity } from "@/api/cart";
+import { getUserId, isLoggedIn } from "@/api/auth";
 import type { Carts } from "@/types/graphql";
 
 interface CartItemWithManage extends Carts {
@@ -102,9 +114,11 @@ export default {
         }, 0);
     });
 
-    // 计算选中数量
+    // 计算选中数量（排除已下架或已删除的商品）
     const selectedCount = computed(() => {
-      return cartItems.value.filter((item) => item.is_selected).length;
+      return cartItems.value.filter(
+        (item) => item.is_selected && !item.product?.is_off_shelf && !item.product?.is_deleted
+      ).length;
     });
 
     // 是否全选
@@ -138,10 +152,24 @@ export default {
     const loadCarts = async () => {
       if (loading.value) return;
 
+      // 检查登录状态
+      if (!isLoggedIn()) {
+        uni.navigateTo({
+          url: "/pages/login/index",
+        });
+        return;
+      }
+
+      const userId = getUserId();
+      if (!userId) {
+        uni.navigateTo({
+          url: "/pages/login/index",
+        });
+        return;
+      }
+
       loading.value = true;
       try {
-        // TODO: 获取当前用户ID
-        const userId = "1"; // 临时使用固定用户ID
         const result = await getCarts(userId);
         // 为每个商品添加管理模式选中状态
         cartItems.value = result.map((item) => ({
@@ -325,6 +353,21 @@ export default {
         });
         return;
       }
+
+      // 检查是否有已下架或已删除的商品
+      const invalidItems = selectedItems.filter(
+        (item) => item.product?.is_off_shelf || item.product?.is_deleted
+      );
+
+      if (invalidItems.length > 0) {
+        uni.showModal({
+          title: "提示",
+          content: `有${invalidItems.length}个商品已下架或已删除，无法结算。请先移除这些商品。`,
+          showCancel: false,
+        });
+        return;
+      }
+
       // 跳转到结算页面
       uni.navigateTo({
         url: "/pages/checkout/index",
@@ -358,12 +401,6 @@ export default {
 
     onShow(() => {
       loadCarts();
-    });
-
-    onPullDownRefresh(() => {
-      loadCarts().finally(() => {
-        uni.stopPullDownRefresh();
-      });
     });
 
     return {
@@ -491,15 +528,61 @@ export default {
   padding-right: 20rpx;
 }
 
+.cart-item-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  flex-wrap: wrap;
+  margin-bottom: 8rpx;
+}
+
 .cart-item-name {
   font-size: 28rpx;
   color: #333;
-  margin-bottom: 12rpx;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   line-clamp: 2;
   overflow: hidden;
+  flex: 1;
+  min-width: 0;
+}
+
+.cart-status-badge {
+  padding: 4rpx 10rpx;
+  border-radius: 6rpx;
+  font-size: 20rpx;
+  flex-shrink: 0;
+}
+
+.cart-status-badge.off-shelf {
+  background-color: #fff3cd;
+}
+
+.cart-status-badge.off-shelf .badge-text {
+  color: #856404;
+  font-weight: 500;
+}
+
+.cart-status-badge.deleted {
+  background-color: #f8d7da;
+}
+
+.cart-status-badge.deleted .badge-text {
+  color: #721c24;
+  font-weight: 500;
+}
+
+.cart-item-status-tip {
+  margin-top: 8rpx;
+  padding: 8rpx;
+  background-color: #fff3cd;
+  border-radius: 6rpx;
+}
+
+.cart-item-status-tip .tip-text {
+  font-size: 22rpx;
+  color: #856404;
 }
 
 .cart-item-price-row {

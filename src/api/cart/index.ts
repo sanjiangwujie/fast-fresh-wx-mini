@@ -27,6 +27,8 @@ export const getCarts = async (userId: string | number): Promise<Carts[]> => {
           unit_stock
           unit
           sales
+          is_off_shelf
+          is_deleted
         }
       }
     }
@@ -56,6 +58,37 @@ export const addToCart = async (
   productId: string | number,
   quantity: number
 ): Promise<Carts | null> => {
+  // 先检查商品状态
+  const productQuery = `
+    query CheckProductStatus($productId: bigint!) {
+      products_by_pk(id: $productId) {
+        id
+        name
+        is_off_shelf
+        is_deleted
+      }
+    }
+  `;
+
+  const productResult = await client.execute<{ products_by_pk: { id: bigint; name: string; is_off_shelf: boolean; is_deleted: boolean } | null }>({
+    query: productQuery,
+    variables: {
+      productId: Number(productId),
+    },
+  });
+
+  if (!productResult.products_by_pk) {
+    throw new Error("商品不存在");
+  }
+
+  if (productResult.products_by_pk.is_deleted) {
+    throw new Error(`商品"${productResult.products_by_pk.name}"已删除，无法加入购物车`);
+  }
+
+  if (productResult.products_by_pk.is_off_shelf) {
+    throw new Error(`商品"${productResult.products_by_pk.name}"已下架，无法加入购物车`);
+  }
+
   // 查询购物车中是否已有该商品，获取当前数量
   const checkQuery = `
     query CheckCartItem($userId: bigint!, $productId: bigint!) {
@@ -210,6 +243,8 @@ export const updateCartQuantity = async (
           unit_stock
           unit
           sales
+          is_off_shelf
+          is_deleted
         }
       }
     }

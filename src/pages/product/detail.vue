@@ -107,6 +107,12 @@
         </view>
         <view class="product-name-row">
           <text class="product-name-full">{{ product.name || "" }}</text>
+          <view class="product-status-badge off-shelf" v-if="product.is_off_shelf">
+            <text class="badge-text">已下架</text>
+          </view>
+        </view>
+        <view class="product-status-tip" v-if="product.is_off_shelf">
+          <text class="tip-text">该商品已下架，暂时无法购买</text>
         </view>
       </view>
 
@@ -302,8 +308,12 @@
             <text class="icon-text">购物车</text>
           </view>
         </view>
-        <view class="add-cart-btn" @click="handleAddToCart">
-          <text class="btn-text">加入购物车</text>
+        <view 
+          class="add-cart-btn" 
+          :class="{ disabled: product.is_off_shelf || product.is_deleted }"
+          @click="handleAddToCart"
+        >
+          <text class="btn-text">{{ product.is_off_shelf || product.is_deleted ? '商品已下架' : '加入购物车' }}</text>
         </view>
       </view>
     </view>
@@ -321,6 +331,7 @@ import {
   type PriceHistoryItem
 } from "@/api/product";
 import { addToCart, getCarts } from "@/api/cart";
+import { getUserId, isLoggedIn } from "@/api/auth";
 import type { Products } from "@/types/graphql";
 import PriceLineChart, { type PriceDataPoint } from "@/components/PriceLineChart.vue";
 
@@ -799,9 +810,18 @@ export default {
 
     // 加载购物车数量
     const loadCartCount = async () => {
+      // 如果未登录，不加载购物车数量
+      if (!isLoggedIn()) {
+        cartItemCount.value = 0;
+        return;
+      }
+
       try {
-        // TODO: 获取当前用户ID
-        const userId = "1"; // 临时使用固定用户ID
+        const userId = getUserId();
+        if (!userId) {
+          cartItemCount.value = 0;
+          return;
+        }
         const carts = await getCarts(userId);
         // 计算购物车中不同商品种类的数量
         cartItemCount.value = carts.length;
@@ -815,9 +835,31 @@ export default {
     const handleAddToCart = async () => {
       if (!product.value) return;
 
+      // 检查登录状态
+      if (!isLoggedIn()) {
+        uni.showModal({
+          title: "提示",
+          content: "请先登录",
+          success: (res) => {
+            if (res.confirm) {
+              uni.navigateTo({
+                url: "/pages/login/index",
+              });
+            }
+          },
+        });
+        return;
+      }
+
+      const userId = getUserId();
+      if (!userId) {
+        uni.navigateTo({
+          url: "/pages/login/index",
+        });
+        return;
+      }
+
       try {
-        // TODO: 获取当前用户ID
-        const userId = "1"; // 临时使用固定用户ID
         await addToCart(userId, product.value.id, 1);
         // 更新购物车数量
         await loadCartCount();
@@ -1671,10 +1713,43 @@ export default {
   box-shadow: 0 4rpx 12rpx rgba(255, 149, 0, 0.3);
 }
 
+.add-cart-btn.disabled {
+  background: #ccc;
+  box-shadow: none;
+  pointer-events: none;
+}
+
 .btn-text {
   font-size: 30rpx;
   font-weight: bold;
   color: #fff;
+}
+
+.product-status-badge {
+  padding: 6rpx 16rpx;
+  border-radius: 8rpx;
+  font-size: 22rpx;
+}
+
+.product-status-badge.off-shelf {
+  background-color: #fff3cd;
+}
+
+.product-status-badge.off-shelf .badge-text {
+  color: #856404;
+  font-weight: 500;
+}
+
+.product-status-tip {
+  margin-top: 12rpx;
+  padding: 12rpx;
+  background-color: #fff3cd;
+  border-radius: 8rpx;
+}
+
+.tip-text {
+  font-size: 24rpx;
+  color: #856404;
 }
 
 /* 价格变动历史 */

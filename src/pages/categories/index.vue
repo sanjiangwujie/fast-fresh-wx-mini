@@ -18,7 +18,7 @@
             :key="index"
             @click="handleOriginCategoryClick(item)"
           >
-            <text class="origin-category-text">{{ item || "全部" }}</text>
+            <text class="origin-category-text">{{ (typeof item === 'string' ? item : String(item || "全部")) }}</text>
           </view>
         </view>
       </scroll-view>
@@ -107,7 +107,7 @@
 
 <script lang="ts">
 import { ref, computed, onMounted, watch } from "vue";
-import { onLoad, onPullDownRefresh } from "@dcloudio/uni-app";
+import { onLoad } from "@dcloudio/uni-app";
 import { getProducts } from "@/api/product";
 import { getCategories, getCategoryNames } from "@/api/category";
 import type { Products, Categories, Products_Bool_Exp } from "@/types/graphql";
@@ -115,10 +115,13 @@ import { Order_By } from "@/types/graphql";
 
 export default {
   setup() {
+    // 顶部一级分类列表（category_name 去重）
     const originCategories = ref<string[]>([]);
-    const selectedOriginCategory = ref<string | null>(null);
+    const selectedOriginCategory = ref<string | null>("全部");
     
-    const categories = ref<Categories[]>([]);
+    // 左侧二级分类列表（categories 表的 name）
+    const allCategories = ref<Categories[]>([]); // 所有分类数据
+    const categories = ref<Categories[]>([]); // 过滤后的分类列表
     const selectedCategoryId = ref<number | null>(null);
 
     const products = ref<Products[]>([]);
@@ -136,32 +139,60 @@ export default {
       return products.value.filter((_, index) => index % 2 === 1);
     });
 
-    // 加载分类类别（category_name 去重）
-    const loadCategoryNames = async () => {
+    // 根据选中的 category_name 过滤 categories
+    const filterCategoriesByOriginCategory = () => {
+      if (selectedOriginCategory.value === "全部" || !selectedOriginCategory.value) {
+        // 显示所有分类
+        categories.value = [
+          { id: null as any, name: "全部", category_name: null, created_at: "", updated_at: "" } as any,
+          ...allCategories.value,
+        ];
+      } else {
+        // 只显示匹配 category_name 的分类
+        const filtered = allCategories.value.filter(
+          (cat) => cat.category_name === selectedOriginCategory.value
+        );
+        categories.value = [
+          { id: null as any, name: "全部", category_name: selectedOriginCategory.value, created_at: "", updated_at: "" } as any,
+          ...filtered,
+        ];
+      }
+      // 重置选中的二级分类
+      selectedCategoryId.value = null;
+    };
+
+    // 加载顶部一级分类列表（category_name 去重）
+    const loadCategoryNames = async (preserveSelection = false) => {
       try {
         const result = await getCategoryNames();
+        // 确保result是字符串数组
+        const categoryNames: string[] = [];
+        if (Array.isArray(result)) {
+          result.forEach(item => {
+            if (item != null && typeof item === 'string' && item.trim()) {
+              categoryNames.push(item);
+            }
+          });
+        }
         // 在开头添加"全部"选项
-        originCategories.value = ["全部", ...result];
-        // 默认选中"全部"
-        selectedOriginCategory.value = "全部";
+        originCategories.value = ["全部", ...categoryNames];
+        // 只有在不保留选择时才默认选中"全部"
+        if (!preserveSelection) {
+          selectedOriginCategory.value = "全部";
+        }
       } catch (error) {
         console.error("加载分类类别失败:", error);
       }
     };
 
-    // 加载 categories 列表
+    // 加载所有 categories 列表（categories 表的 name）
     const loadCategories = async () => {
       try {
-        console.log("开始加载 categories...");
         const result = await getCategories();
-        console.log("categories 加载结果:", result);
-        // 将"全部"选项放到第一项（使用 Partial 类型）
-        categories.value = [
-          { id: null as any, name: "全部", category_name: null, created_at: "", updated_at: "" } as any,
-          ...result,
-        ];
-        // 默认选中"全部"
-        selectedCategoryId.value = null;
+        // 保存所有分类数据
+        allCategories.value = result;
+        // 根据选中的一级分类过滤
+        filterCategoriesByOriginCategory();
       } catch (error) {
         console.error("加载 categories 失败:", error);
         uni.showToast({
@@ -235,13 +266,53 @@ export default {
       }
     };
 
-    // 处理 origins category 点击
-    const handleOriginCategoryClick = (category: string) => {
-      selectedOriginCategory.value = category;
+    // 根据category_name选择分类（从首页金刚区跳转过来时使用）
+    const selectCategoryByName = async (categoryName: string) => {
+      try {
+        // 先加载所有数据
+        await Promise.all([
+          loadCategoryNames(),
+          loadCategories(),
+        ]);
+        
+        // 设置选中的一级分类（category_name）
+        if (originCategories.value.includes(categoryName)) {
+          selectedOriginCategory.value = categoryName;
+          // 过滤左侧分类列表
+          filterCategoriesByOriginCategory();
+          // 加载商品列表
+          await loadProducts(true);
+        } else {
+          // 如果找不到匹配的分类，使用默认加载
+          selectedOriginCategory.value = "全部";
+          filterCategoriesByOriginCategory();
+          await loadProducts(true);
+        }
+      } catch (error) {
+        console.error("根据category_name选择分类失败:", error);
+        // 出错时使用默认加载
+        selectedOriginCategory.value = "全部";
+        filterCategoriesByOriginCategory();
+        await loadProducts(true);
+      }
+    };
+
+    // 处理顶部一级分类点击（category_name）
+    const handleOriginCategoryClick = (categoryName: string | any) => {
+      // 确保categoryName是字符串类型
+      const categoryStr = typeof categoryName === 'string' ? categoryName : String(categoryName || "全部");
+      
+      // 设置选中的一级分类
+      selectedOriginCategory.value = categoryStr;
+      
+      // 根据选中的一级分类过滤左侧分类列表
+      filterCategoriesByOriginCategory();
+      
+      // 重新加载商品列表
       loadProducts(true);
     };
 
-    // 处理 category 点击
+    // 处理左侧二级分类点击（categories 表的 name）
     const handleCategoryClick = (categoryId: number | null) => {
       selectedCategoryId.value = categoryId;
       loadProducts(true);
@@ -268,27 +339,29 @@ export default {
       }
     };
 
-    onLoad(() => {
-      loadCategoryNames().then(() => {
-        console.log("category names 加载完成");
-      });
-      loadCategories().then(() => {
-        console.log("categories 加载完成");
-      });
-      loadProducts(true).then(() => {
-        console.log("products 加载完成");
-      });
+    onLoad((options: any) => {
+      // 检查是否有category_name参数（从URL参数或storage中获取）
+      let categoryName = options?.category_name;
+      
+      // 如果URL参数中没有，尝试从storage中获取（用于tabBar页面跳转）
+      if (!categoryName) {
+        categoryName = uni.getStorageSync("category_name_param");
+        if (categoryName) {
+          uni.removeStorageSync("category_name_param");
+        }
+      }
+      
+      if (categoryName) {
+        // 如果有category_name参数，自动选择对应分类
+        selectCategoryByName(decodeURIComponent(categoryName));
+      } else {
+        // 否则正常加载
+        loadCategoryNames();
+        loadCategories();
+        loadProducts(true);
+      }
     });
 
-    onPullDownRefresh(() => {
-      Promise.all([
-        loadCategoryNames(),
-        loadCategories(),
-        loadProducts(true),
-      ]).finally(() => {
-        uni.stopPullDownRefresh();
-      });
-    });
 
     return {
       originCategories,

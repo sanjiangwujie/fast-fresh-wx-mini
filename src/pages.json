@@ -3,22 +3,19 @@
 		{
 			"path": "pages/index/index",
 			"style": {
-				"navigationBarTitleText": "首页",
-				"enablePullDownRefresh": true
+				"navigationBarTitleText": "首页"
 			}
 		},
 		{
 			"path": "pages/categories/index",
 			"style": {
-				"navigationBarTitleText": "分类",
-				"enablePullDownRefresh": true
+				"navigationBarTitleText": "分类"
 			}
 		},
 		{
 			"path": "pages/cart/index",
 			"style": {
-				"navigationBarTitleText": "购物车",
-				"enablePullDownRefresh": true
+				"navigationBarTitleText": "购物车"
 			}
 		},
 		{
@@ -30,8 +27,7 @@
 		{
 			"path": "pages/orders/index",
 			"style": {
-				"navigationBarTitleText": "我的订单",
-				"enablePullDownRefresh": true
+				"navigationBarTitleText": "我的订单"
 			}
 		},
 		{
@@ -56,14 +52,79 @@
 		{
 			"path": "pages/order-payment/index",
 			"style": {
-				"navigationBarTitleText": "订单结算",
-				"enablePullDownRefresh": false
+				"navigationBarTitleText": "订单结算"
 			}
 		},
 		{
 			"path": "pages/order-share/index",
 			"style": {
 				"navigationBarTitleText": "订单详情"
+			}
+		},
+		{
+			"path": "pages/login/index",
+			"style": {
+				"navigationBarTitleText": "登录"
+			}
+		},
+		{
+			"path": "pages/batch-manage/index",
+			"style": {
+				"navigationBarTitleText": "批次管理"
+			}
+		},
+		{
+			"path": "pages/product-manage/index",
+			"style": {
+				"navigationBarTitleText": "商品管理"
+			}
+		},
+		{
+			"path": "pages/product-create/index",
+			"style": {
+				"navigationBarTitleText": "创建商品"
+			}
+		},
+		{
+			"path": "pages/product-edit/index",
+			"style": {
+				"navigationBarTitleText": "编辑商品"
+			}
+		},
+		{
+			"path": "pages/batch-select/index",
+			"style": {
+				"navigationBarTitleText": "选择批次"
+			}
+		},
+		{
+			"path": "pages/batch-create/index",
+			"style": {
+				"navigationBarTitleText": "新建批次"
+			}
+		},
+		{
+			"path": "pages/batch-edit/index",
+			"style": {
+				"navigationBarTitleText": "编辑批次"
+			}
+		},
+		{
+			"path": "pages/order-manage/index",
+			"style": {
+				"navigationBarTitleText": "订单管理"
+			}
+		},
+		{
+			"path": "pages/address-manage/index",
+			"style": {
+				"navigationBarTitleText": "收货地址"
+			}
+		},
+		{
+			"path": "pages/address-edit/index",
+			"style": {
+				"navigationBarTitleText": "编辑收货地址"
 			}
 		}
 	],

@@ -66,6 +66,50 @@
         </view>
       </view>
 
+      <!-- 付款信息 -->
+      <view class="section" v-if="appConfig">
+        <view class="section-title">付款信息</view>
+        <view class="payment-info">
+          <view class="payment-tip">
+            <text class="tip-text">请通过以下方式完成付款：</text>
+          </view>
+          
+          <!-- 二维码容器 - 并排显示 -->
+          <view class="payment-codes-row">
+            <!-- 收款码 -->
+            <view class="payment-code-item" v-if="appConfig.payment_code">
+              <view class="payment-code-label">收款码</view>
+              <view class="payment-code-wrapper" @click="handlePreviewPaymentCode">
+                <image 
+                  class="payment-code-image" 
+                  :src="appConfig.payment_code" 
+                  mode="aspectFit"
+                  :lazy-load="false"
+                />
+              </view>
+              <view class="payment-code-desc">扫码支付</view>
+            </view>
+
+            <!-- 微信好友码 -->
+            <view class="payment-code-item" v-if="appConfig.wechat_code">
+              <view class="payment-code-label">微信好友码</view>
+              <view class="payment-code-wrapper" @click="handlePreviewWechatCode">
+                <image 
+                  class="payment-code-image" 
+                  :src="appConfig.wechat_code" 
+                  mode="aspectFit"
+                  :lazy-load="false"
+                />
+              </view>
+              <view class="payment-code-desc">添加好友支付</view>
+            </view>
+          </view>
+          <view class="preview-tip">
+            <text class="tip-text">点击图片可查看大图</text>
+          </view>
+        </view>
+      </view>
+
       <!-- 付款截图 -->
       <view class="section">
         <view class="section-title">付款截图</view>
@@ -81,19 +125,26 @@
         </view>
         <!-- 未支付状态：可以上传和编辑 -->
         <view v-else>
-          <view class="upload-area" v-if="!paymentVoucherUrl" @click="handleChooseImage">
+          <view class="upload-area" v-if="!paymentVoucherUrl && !uploading" @click="handleChooseImage">
             <view class="upload-icon">📷</view>
             <text class="upload-text">点击上传付款截图</text>
           </view>
-          <view class="image-preview" v-else>
+          <view class="image-preview" v-if="paymentVoucherUrl">
             <image class="preview-image" :src="paymentVoucherUrl" mode="aspectFit" @click="handlePreviewImage" />
             <view class="image-actions">
-              <view class="action-btn" @click="handleChooseImage">重新上传</view>
-              <view class="action-btn delete" @click="handleDeleteImage">删除</view>
+              <view class="action-btn" @click="handleChooseImage" :class="{ disabled: uploading }">重新上传</view>
+              <view class="action-btn delete" @click="handleDeleteImage" :class="{ disabled: uploading }">删除</view>
             </view>
           </view>
+          <!-- 上传进度 -->
+          <view class="upload-progress" v-if="uploading">
+            <view class="progress-bar">
+              <view class="progress-fill" :style="{ width: uploadProgress + '%' }"></view>
+            </view>
+            <text class="progress-text">{{ uploadProgress }}%</text>
+          </view>
           <view class="upload-tip" v-if="uploading">
-            <text>上传中...</text>
+            <text>上传中，请勿关闭页面...</text>
           </view>
         </view>
       </view>
@@ -108,7 +159,7 @@
         <text class="share-btn-text">分享给运营</text>
       </button>
       <!-- 未支付状态：显示确认付款按钮 -->
-      <view v-if="!isPaid" class="submit-btn" @click="handleSubmitPayment" :class="{ disabled: submitting }">
+      <view v-if="!isPaid" class="submit-btn" @click="handleSubmitPayment" :class="{ disabled: submitting || !paymentVoucherUrl || uploading }">
         <text class="submit-btn-text">{{ submitting ? "提交中..." : "确认付款" }}</text>
       </view>
     </view>
@@ -119,7 +170,9 @@
 import { ref, computed, onMounted } from "vue";
 import { onLoad } from "@dcloudio/uni-app";
 import { getOrderById, updateOrderPaymentVoucher } from "@/api/order";
-import type { Orders } from "@/types/graphql";
+import { uploadToQiniu } from "@/api/upload";
+import { getAppConfig } from "@/api/app";
+import type { Orders, App as AppType } from "@/types/graphql";
 
 // 声明全局 getCurrentPages
 declare function getCurrentPages(): any[];
@@ -181,7 +234,9 @@ export default {
     const orderId = ref<string | number>("");
     const paymentVoucherUrl = ref<string>("");
     const uploading = ref(false);
+    const uploadProgress = ref(0);
     const submitting = ref(false);
+    const appConfig = ref<AppType | null>(null);
 
     // 判断是否已支付
     const isPaid = computed(() => {
@@ -244,6 +299,41 @@ export default {
       }
     };
 
+    // 加载 app 配置
+    const loadAppConfig = async () => {
+      try {
+        const config = await getAppConfig();
+        console.log("[付款页面] 加载 app 配置:", config);
+        appConfig.value = config;
+      } catch (error) {
+        console.error("[付款页面] 加载 app 配置失败:", error);
+        uni.showToast({
+          title: "加载付款信息失败",
+          icon: "none",
+        });
+      }
+    };
+
+    // 预览收款码
+    const handlePreviewPaymentCode = () => {
+      if (appConfig.value?.payment_code) {
+        uni.previewImage({
+          urls: [appConfig.value.payment_code],
+          current: appConfig.value.payment_code,
+        });
+      }
+    };
+
+    // 预览微信好友码
+    const handlePreviewWechatCode = () => {
+      if (appConfig.value?.wechat_code) {
+        uni.previewImage({
+          urls: [appConfig.value.wechat_code],
+          current: appConfig.value.wechat_code,
+        });
+      }
+    };
+
     // 选择图片
     const handleChooseImage = () => {
       uni.chooseImage({
@@ -264,56 +354,28 @@ export default {
       });
     };
 
-    // 上传图片
+    // 上传图片（使用七牛云直传）
     const uploadImage = async (filePath: string) => {
       uploading.value = true;
+      uploadProgress.value = 0;
+      
       try {
-        // TODO: 替换为实际的后端API地址，可以从环境变量或配置文件中读取
-        // 示例：const backendUrl = process.env.VUE_APP_API_BASE_URL || "https://your-backend-url.com";
-        const backendUrl = "https://your-backend-url.com"; // 需要配置实际的后端地址
-        const uploadUrl = `${backendUrl}/api/upload/form`;
-
-        // 使用uni.uploadFile上传
-        const uploadResult = await new Promise<any>((resolve, reject) => {
-          uni.uploadFile({
-            url: uploadUrl,
-            filePath: filePath,
-            name: "file",
-            formData: {},
-            header: {
-              // 如果需要认证，在这里添加header
-            },
-            success: (res) => {
-              try {
-                const data = JSON.parse(res.data);
-                if (data.success && data.data) {
-                  // 处理单个文件或多个文件的情况
-                  const fileData = Array.isArray(data.data) ? data.data[0] : data.data;
-                  resolve(fileData);
-                } else {
-                  reject(new Error(data.message || "上传失败"));
-                }
-              } catch (e) {
-                reject(new Error("解析响应失败"));
-              }
-            },
-            fail: (err) => {
-              reject(err);
-            },
-          });
+        // 使用七牛云直传
+        const { task, url } = await uploadToQiniu(filePath, (progress) => {
+          uploadProgress.value = progress;
         });
 
-        if (uploadResult.url) {
-          paymentVoucherUrl.value = uploadResult.url;
-          uni.showToast({
-            title: "上传成功",
-            icon: "success",
-          });
-        } else {
-          throw new Error("上传响应中缺少URL");
-        }
+        // 上传成功
+        paymentVoucherUrl.value = url;
+        uploadProgress.value = 100;
+        
+        uni.showToast({
+          title: "上传成功",
+          icon: "success",
+        });
       } catch (error) {
         console.error("上传图片失败:", error);
+        uploadProgress.value = 0;
         uni.showToast({
           title: error instanceof Error ? error.message : "上传失败",
           icon: "none",
@@ -348,15 +410,23 @@ export default {
 
     // 提交付款
     const handleSubmitPayment = async () => {
-      if (submitting.value) return;
+      if (submitting.value || !paymentVoucherUrl.value || uploading.value) {
+        if (!paymentVoucherUrl.value) {
+          uni.showToast({
+            title: "请先上传付款截图",
+            icon: "none",
+          });
+        }
+        return;
+      }
 
       submitting.value = true;
       try {
-        // 付款截图为非必填，有则更新，没有也可以提交
-        await updateOrderPaymentVoucher(orderId.value, paymentVoucherUrl.value || null);
+        // 必须上传付款截图才能提交
+        await updateOrderPaymentVoucher(orderId.value, paymentVoucherUrl.value);
         
         uni.showToast({
-          title: paymentVoucherUrl.value ? "付款信息已提交" : "订单已确认",
+          title: "付款信息已提交",
           icon: "success",
         });
 
@@ -389,6 +459,10 @@ export default {
       }
     });
 
+    onMounted(() => {
+      loadAppConfig();
+    });
+
     // 将数据挂载到页面实例上，以便 onShareAppMessage 访问
     const pageInstance = getCurrentPages()[getCurrentPages().length - 1];
     if (pageInstance) {
@@ -398,8 +472,10 @@ export default {
 
     return {
       order,
+      appConfig,
       paymentVoucherUrl,
       uploading,
+      uploadProgress,
       submitting,
       isPaid,
       getPaymentStatusText,
@@ -408,6 +484,8 @@ export default {
       handleChooseImage,
       handlePreviewImage,
       handleDeleteImage,
+      handlePreviewPaymentCode,
+      handlePreviewWechatCode,
       handleSubmitPayment,
     };
   },
@@ -624,6 +702,42 @@ export default {
   color: #999;
 }
 
+/* 上传进度 */
+.upload-progress {
+  margin-top: 20rpx;
+  padding: 20rpx;
+  background-color: #f5f5f5;
+  border-radius: 8rpx;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8rpx;
+  background-color: #e0e0e0;
+  border-radius: 4rpx;
+  overflow: hidden;
+  margin-bottom: 12rpx;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3cc51f 0%, #2ea517 100%);
+  border-radius: 4rpx;
+  transition: width 0.3s ease;
+}
+
+.progress-text {
+  display: block;
+  text-align: center;
+  font-size: 24rpx;
+  color: #666;
+}
+
+.action-btn.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
 /* 底部操作栏 */
 .bottom-bar {
   position: fixed;
@@ -728,6 +842,79 @@ export default {
 
 .no-payment-text {
   font-size: 28rpx;
+  color: #999;
+}
+
+/* 付款信息 */
+.payment-info {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+}
+
+.payment-tip {
+  padding: 8rpx 0;
+}
+
+.tip-text {
+  font-size: 26rpx;
+  color: #666;
+  line-height: 1.6;
+}
+
+.payment-codes-row {
+  display: flex;
+  gap: 20rpx;
+  align-items: flex-start;
+}
+
+.payment-code-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.payment-code-label {
+  font-size: 28rpx;
+  font-weight: 500;
+  color: #333;
+}
+
+.payment-code-wrapper {
+  width: 100%;
+  padding: 12rpx;
+  background-color: #fff;
+  border-radius: 12rpx;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border: 1rpx solid #e0e0e0;
+  min-height: 200rpx;
+}
+
+.payment-code-image {
+  width: 100%;
+  max-width: 200rpx;
+  height: 200rpx;
+  border-radius: 8rpx;
+  background-color: #f5f5f5;
+}
+
+.payment-code-desc {
+  font-size: 22rpx;
+  color: #999;
+  text-align: center;
+}
+
+.preview-tip {
+  margin-top: 8rpx;
+  text-align: center;
+}
+
+.preview-tip .tip-text {
+  font-size: 22rpx;
   color: #999;
 }
 </style>
