@@ -53,7 +53,7 @@
             <image class="product-image" :src="item.image_url || ''" mode="aspectFill" />
             <view class="product-info">
               <view class="product-name-row">
-                <text class="product-name">{{ item.name }}</text>
+              <text class="product-name">{{ item.name }}</text>
                 <view class="product-status-badge off-shelf" v-if="item.is_off_shelf">
                   <text class="badge-text">已下架</text>
                 </view>
@@ -81,7 +81,7 @@
             <image class="product-image" :src="item.image_url || ''" mode="aspectFill" />
             <view class="product-info">
               <view class="product-name-row">
-                <text class="product-name">{{ item.name }}</text>
+              <text class="product-name">{{ item.name }}</text>
                 <view class="product-status-badge off-shelf" v-if="item.is_off_shelf">
                   <text class="badge-text">已下架</text>
                 </view>
@@ -276,9 +276,9 @@ export default {
             },
           });
         } else {
-          uni.switchTab({
-            url: "/pages/categories/index",
-          });
+      uni.switchTab({
+        url: "/pages/categories/index",
+      });
         }
       } else {
         // 其他链接直接跳转

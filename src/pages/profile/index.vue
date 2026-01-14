@@ -258,9 +258,9 @@ export default {
             },
             fail: (err) => {
               console.error("[个人中心] 订单管理页面跳转失败:", err);
-              uni.showToast({
+          uni.showToast({
                 title: "页面跳转失败",
-                icon: "none",
+            icon: "none",
               });
             },
           });

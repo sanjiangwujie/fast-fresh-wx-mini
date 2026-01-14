@@ -178,7 +178,7 @@ export default {
         originCategories.value = ["全部", ...categoryNames];
         // 只有在不保留选择时才默认选中"全部"
         if (!preserveSelection) {
-          selectedOriginCategory.value = "全部";
+        selectedOriginCategory.value = "全部";
         }
       } catch (error) {
         console.error("加载分类类别失败:", error);

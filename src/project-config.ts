@@ -35,6 +35,4 @@ function isWeChatDevTools(): boolean {
 
 // 根据环境设置API地址
 // 在微信开发者工具中使用本地地址，其他环境使用生产地址
-export const API_BASE_URL = isWeChatDevTools() 
-  ? "http://localhost:3000" 
-  : "https://sanjiangwujie-1-api.weweknow.com";
+export const API_BASE_URL = "https://sanjiangwujie-1-api.weweknow.com";

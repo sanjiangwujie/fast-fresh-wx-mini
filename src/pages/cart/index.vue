@@ -23,7 +23,7 @@
           />
           <view class="cart-item-info" @click="handleGoToProductDetail(item)">
             <view class="cart-item-name-row">
-              <text class="cart-item-name">{{ item.product?.name || "" }}</text>
+            <text class="cart-item-name">{{ item.product?.name || "" }}</text>
               <view class="cart-status-badge off-shelf" v-if="item.product?.is_off_shelf">
                 <text class="badge-text">已下架</text>
               </view>

@@ -2,8 +2,8 @@
 	"name": "三江无界",
 	"appid": "__UNI__39E3890",
 	"description": "",
-	"versionName": "1.0.0",
-	"versionCode": "100",
+	"versionName": "1.0.1",
+	"versionCode": "101",
 	"transformPx": false,
 	"app-plus": {
 		"usingComponents": true,
@@ -45,7 +45,8 @@
 		"appid": "wx261d392f75f3e3ed",
 		"setting": {
 			"urlCheck": false,
-			"minified": true
+			"minified": true,
+			"lazyCodeLoading": "requiredComponents"
 		},
 		"usingComponents": true,
 		"permission": {},

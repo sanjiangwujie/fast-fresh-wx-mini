@@ -48,9 +48,9 @@
             <view class="placeholder-content">
               <text class="placeholder-icon">📍</text>
               <text class="placeholder-text">请选择收货地址</text>
-            </view>
+        </view>
             <text class="placeholder-arrow">›</text>
-          </view>
+        </view>
         </view>
       </view>
 
@@ -226,7 +226,7 @@ export default {
     const handleSelectAddress = () => {
       uni.navigateTo({
         url: "/pages/address-manage/index",
-      });
+        });
     };
 
     // 验证收货信息

@@ -369,10 +369,10 @@ export default {
         paymentVoucherUrl.value = url;
         uploadProgress.value = 100;
         
-        uni.showToast({
-          title: "上传成功",
-          icon: "success",
-        });
+          uni.showToast({
+            title: "上传成功",
+            icon: "success",
+          });
       } catch (error) {
         console.error("上传图片失败:", error);
         uploadProgress.value = 0;
