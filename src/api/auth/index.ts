@@ -96,10 +96,22 @@ export async function passwordLogin(params: PasswordLoginParams): Promise<LoginR
 /**
  * 保存登录信息到本地存储
  */
-export function saveLoginInfo(response: LoginResponse): void {
+export async function saveLoginInfo(response: LoginResponse): Promise<void> {
   uni.setStorageSync("token", response.token);
   uni.setStorageSync("userId", response.userId);
   uni.setStorageSync("userInfo", response.user);
+  
+  // 登录时立即获取并保存用户角色，减少后续请求
+  try {
+    const { getUserRolesForceRefresh } = await import("@/api/user");
+    const roles = await getUserRolesForceRefresh(response.userId);
+    uni.setStorageSync("userRoles", roles);
+    console.log("[登录] 已保存用户角色:", roles);
+  } catch (error) {
+    console.error("[登录] 获取用户角色失败:", error);
+    // 即使获取角色失败也不影响登录流程
+    uni.setStorageSync("userRoles", []);
+  }
 }
 
 /**
@@ -124,12 +136,20 @@ export function getUserInfo(): LoginResponse["user"] | null {
 }
 
 /**
+ * 获取本地存储的用户角色
+ */
+export function getUserRoles(): Array<{ role_type?: string | null }> {
+  return uni.getStorageSync("userRoles") || [];
+}
+
+/**
  * 清除登录信息
  */
 export function clearLoginInfo(): void {
   uni.removeStorageSync("token");
   uni.removeStorageSync("userId");
   uni.removeStorageSync("userInfo");
+  uni.removeStorageSync("userRoles");
 }
 
 /**

@@ -138,7 +138,7 @@ export default {
           codeSource: "phone",
         });
         
-        saveLoginInfo(response);
+        await saveLoginInfo(response);
         
         uni.showToast({
           title: "登录成功",
@@ -184,7 +184,7 @@ export default {
           password: password.value,
         });
         
-        saveLoginInfo(response);
+        await saveLoginInfo(response);
         
         uni.showToast({
           title: "登录成功",

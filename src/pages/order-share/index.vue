@@ -247,7 +247,7 @@ export default {
         const userId = getUserId();
         if (userId) {
           const roles = await getUserRoles(userId);
-          isOperator.value = roles.some((role) => role.role_type === "operator");
+          isOperator.value = Array.isArray(roles) && roles.some((role) => role.role_type === "operator");
         }
       } catch (error) {
         console.error("检查用户角色失败:", error);

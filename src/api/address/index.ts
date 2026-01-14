@@ -14,6 +14,7 @@ export const getAddresses = async (userId: string | number): Promise<Addresses[]
         order_by: [{ is_default: desc }, { created_at: desc }]
       ) {
         id
+        user_users
         receiver_name
         receiver_phone
         receiver_address
@@ -27,10 +28,15 @@ export const getAddresses = async (userId: string | number): Promise<Addresses[]
     }
   `;
 
+  const userIdNum = Number(userId);
+  if (isNaN(userIdNum) || userIdNum <= 0) {
+    throw new Error("无效的用户ID");
+  }
+
   const result = await client.execute<{ addresses: Addresses[] }>({
     query,
     variables: {
-      userId: Number(userId),
+      userId: userIdNum,
     },
   });
 
@@ -47,6 +53,7 @@ export const getAddressById = async (addressId: string | number): Promise<Addres
     query GetAddressById($id: bigint!) {
       addresses_by_pk(id: $id) {
         id
+        user_users
         receiver_name
         receiver_phone
         receiver_address
@@ -88,9 +95,15 @@ export const createAddress = async (
     is_default?: boolean;
   }
 ): Promise<Addresses | null> => {
+  // 验证 userId
+  const userIdNum = Number(userId);
+  if (isNaN(userIdNum) || userIdNum <= 0) {
+    throw new Error("无效的用户ID");
+  }
+
   // 如果设置为默认地址，需要先取消其他默认地址
   if (params.is_default) {
-    await unsetDefaultAddresses(userId);
+    await unsetDefaultAddresses(userIdNum);
   }
 
   const mutation = `
@@ -117,6 +130,7 @@ export const createAddress = async (
         }
       ) {
         id
+        user_users
         receiver_name
         receiver_phone
         receiver_address
@@ -133,7 +147,7 @@ export const createAddress = async (
   const result = await client.execute<{ insert_addresses_one: Addresses | null }>({
     query: mutation,
     variables: {
-      user_users: Number(userId),
+      user_users: userIdNum,
       receiver_name: params.receiver_name,
       receiver_phone: params.receiver_phone,
       receiver_address: params.receiver_address,
@@ -169,8 +183,11 @@ export const updateAddress = async (
   if (params.is_default !== undefined && params.is_default) {
     // 先获取地址信息以获取userId
     const address = await getAddressById(addressId);
-    if (address) {
-      await unsetDefaultAddresses(address.user_users);
+    if (address && address.user_users) {
+      const userIdNum = Number(address.user_users);
+      if (!isNaN(userIdNum) && userIdNum > 0) {
+        await unsetDefaultAddresses(userIdNum);
+      }
     }
   }
 
@@ -263,6 +280,11 @@ export const deleteAddress = async (addressId: string | number): Promise<boolean
  * @param userId 用户ID
  */
 const unsetDefaultAddresses = async (userId: string | number): Promise<void> => {
+  const userIdNum = Number(userId);
+  if (isNaN(userIdNum) || userIdNum <= 0) {
+    throw new Error("无效的用户ID");
+  }
+
   const mutation = `
     mutation UnsetDefaultAddresses($userId: bigint!) {
       update_addresses(
@@ -277,7 +299,7 @@ const unsetDefaultAddresses = async (userId: string | number): Promise<void> => 
   await client.execute({
     query: mutation,
     variables: {
-      userId: Number(userId),
+      userId: userIdNum,
     },
   });
 };
@@ -293,8 +315,17 @@ export const setDefaultAddress = async (addressId: string | number): Promise<Add
     throw new Error("地址不存在");
   }
 
+  if (!address.user_users) {
+    throw new Error("地址信息不完整");
+  }
+
+  const userIdNum = Number(address.user_users);
+  if (isNaN(userIdNum) || userIdNum <= 0) {
+    throw new Error("无效的用户ID");
+  }
+
   // 取消其他默认地址
-  await unsetDefaultAddresses(address.user_users);
+  await unsetDefaultAddresses(userIdNum);
 
   // 设置当前地址为默认
   return await updateAddress(addressId, { is_default: true });

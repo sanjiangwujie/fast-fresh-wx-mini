@@ -40,39 +40,54 @@ export const getUser = cacheStore.cache(
 );
 
 /**
- * 获取用户的角色列表
+ * 获取用户的角色列表（内部实现，不缓存）
+ */
+const _getUserRolesInternal = async (userId: string | number): Promise<User_Roles[]> => {
+  const query = `
+    query GetUserRoles($userId: bigint!) {
+      user_roles(where: { user_users: { _eq: $userId } }) {
+        id
+        role_type
+        user_users
+        created_at
+        updated_at
+      }
+    }
+  `;
+
+  const result = await client.execute<{ user_roles: User_Roles[] }>({
+    query,
+    variables: {
+      userId: Number(userId),
+    },
+  });
+
+  // 确保返回的是数组
+  return Array.isArray(result.user_roles) ? result.user_roles : [];
+};
+
+/**
+ * 获取用户的角色列表（带缓存）
  * @param userId 用户ID
  * @returns 用户角色列表
  */
 export const getUserRoles = cacheStore.cache(
-  async (userId: string | number): Promise<User_Roles[]> => {
-    const query = `
-      query GetUserRoles($userId: bigint!) {
-        user_roles(where: { user_users: { _eq: $userId } }) {
-          id
-          role_type
-          user_users
-          created_at
-          updated_at
-        }
-      }
-    `;
-
-    const result = await client.execute<{ user_roles: User_Roles[] }>({
-      query,
-      variables: {
-        userId: Number(userId),
-      },
-    });
-
-    return result.user_roles || [];
-  },
+  _getUserRolesInternal,
   {
     duration: 1000 * 60 * 5, // 缓存5分钟
     useCache: true,
     forceRefresh: false,
   }
 );
+
+/**
+ * 获取用户的角色列表（强制刷新，不使用缓存）
+ * @param userId 用户ID
+ * @returns 用户角色列表
+ */
+export const getUserRolesForceRefresh = async (userId: string | number): Promise<User_Roles[]> => {
+  return await _getUserRolesInternal(userId);
+};
 
 /**
  * 检查用户是否有指定角色
@@ -85,7 +100,7 @@ export const hasUserRole = async (
   roleType: string
 ): Promise<boolean> => {
   const roles = await getUserRoles(userId);
-  return roles.some((role) => role.role_type === roleType);
+  return Array.isArray(roles) && roles.some((role) => role.role_type === roleType);
 };
 
 /**

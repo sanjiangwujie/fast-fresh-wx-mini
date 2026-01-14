@@ -132,8 +132,8 @@
 <script lang="ts">
 import { ref, computed } from "vue";
 import { onLoad, onShow } from "@dcloudio/uni-app";
-import { getUser, getUserRoles } from "@/api/user";
-import { getUserId, getUserInfo, clearLoginInfo, isLoggedIn } from "@/api/auth";
+import { getUser, getUserRoles, getUserRolesForceRefresh } from "@/api/user";
+import { getUserId, getUserInfo, getUserRoles as getStoredUserRoles, clearLoginInfo, isLoggedIn } from "@/api/auth";
 import type { Users } from "@/types/graphql";
 
 export default {
@@ -142,7 +142,8 @@ export default {
     const userRoles = ref<Array<{ role_type?: string | null }>>([]);
 
     // 加载用户信息
-    const loadUserInfo = async () => {
+    const loadUserInfo = async (forceRefreshRoles = false) => {
+      console.log("[个人中心] loadUserInfo 开始, forceRefreshRoles:", forceRefreshRoles);
       // 先尝试从本地存储读取
       const localUserInfo = getUserInfo();
       if (localUserInfo) {
@@ -155,10 +156,18 @@ export default {
         } as any;
       }
 
+      // 优先从本地存储读取角色（登录时已保存）
+      const storedRoles = getStoredUserRoles();
+      if (Array.isArray(storedRoles) && storedRoles.length > 0 && !forceRefreshRoles) {
+        console.log("[个人中心] 使用本地存储的角色数据:", storedRoles);
+        userRoles.value = storedRoles;
+      }
+
       // 如果已登录，从服务器获取最新信息
       if (isLoggedIn()) {
         try {
           const userId = getUserId();
+          console.log("[个人中心] 当前用户ID:", userId);
           if (userId) {
             const result = await getUser(userId);
             if (result) {
@@ -172,17 +181,54 @@ export default {
               });
             }
 
-            // 加载用户角色
-            try {
-              const roles = await getUserRoles(userId);
-              userRoles.value = roles;
-            } catch (error) {
-              console.error("加载用户角色失败:", error);
-              userRoles.value = [];
+            // 加载用户角色（如果需要强制刷新或本地没有角色数据）
+            if (forceRefreshRoles || !Array.isArray(storedRoles) || storedRoles.length === 0) {
+              try {
+                console.log("[个人中心] 开始加载用户角色, userId:", userId, "forceRefreshRoles:", forceRefreshRoles);
+                
+                // 如果强制刷新，使用不带缓存的版本
+                const roles = forceRefreshRoles 
+                  ? await getUserRolesForceRefresh(userId)
+                  : await getUserRoles(userId);
+                
+                console.log("[个人中心] 获取到的角色数据:", roles);
+                userRoles.value = Array.isArray(roles) ? roles : [];
+                
+                // 更新本地存储的角色数据
+                if (Array.isArray(roles)) {
+                  uni.setStorageSync("userRoles", roles);
+                }
+                
+                console.log("[个人中心] 设置后的 userRoles.value:", userRoles.value);
+                console.log("[个人中心] userRoles.value 类型:", typeof userRoles.value, "是否为数组:", Array.isArray(userRoles.value));
+                console.log("[个人中心] userRoles.value 长度:", userRoles.value?.length);
+                
+                if (Array.isArray(userRoles.value) && userRoles.value.length > 0) {
+                  console.log("[个人中心] 角色列表详情:", userRoles.value.map(r => ({ role_type: r.role_type })));
+                }
+                
+                console.log("[个人中心] hasFarmerRole:", Array.isArray(userRoles.value) && userRoles.value.some((role) => role.role_type === "farmer"));
+                console.log("[个人中心] hasOperatorRole:", Array.isArray(userRoles.value) && userRoles.value.some((role) => role.role_type === "operator"));
+                console.log("[个人中心] hasAdminRole:", Array.isArray(userRoles.value) && userRoles.value.some((role) => role.role_type === "admin"));
+              } catch (error) {
+                console.error("[个人中心] 加载用户角色失败:", error);
+                console.error("[个人中心] 错误详情:", error instanceof Error ? error.message : JSON.stringify(error));
+                if (error instanceof Error) {
+                  console.error("[个人中心] 错误堆栈:", error.stack);
+                }
+                // 如果加载失败，使用本地存储的角色数据
+                if (Array.isArray(storedRoles) && storedRoles.length > 0) {
+                  userRoles.value = storedRoles;
+                } else {
+                  userRoles.value = [];
+                }
+              }
             }
+          } else {
+            console.warn("[个人中心] userId 为空");
           }
         } catch (error) {
-          console.error("加载用户信息失败:", error);
+          console.error("[个人中心] 加载用户信息失败:", error);
           // 如果获取失败，可能是token过期，清除登录状态
           if (!localUserInfo) {
             clearLoginInfo();
@@ -191,6 +237,7 @@ export default {
           }
         }
       } else {
+        console.log("[个人中心] 用户未登录");
         // 未登录，跳转到登录页
         userInfo.value = null;
         userRoles.value = [];
@@ -199,17 +246,17 @@ export default {
 
     // 检查是否有果农角色
     const hasFarmerRole = computed(() => {
-      return userRoles.value.some((role) => role.role_type === "farmer");
+      return Array.isArray(userRoles.value) && userRoles.value.some((role) => role.role_type === "farmer");
     });
 
     // 检查是否有运营角色
     const hasOperatorRole = computed(() => {
-      return userRoles.value.some((role) => role.role_type === "operator");
+      return Array.isArray(userRoles.value) && userRoles.value.some((role) => role.role_type === "operator");
     });
 
     // 检查是否有管理员角色
     const hasAdminRole = computed(() => {
-      return userRoles.value.some((role) => role.role_type === "admin");
+      return Array.isArray(userRoles.value) && userRoles.value.some((role) => role.role_type === "admin");
     });
 
     // 处理菜单点击
@@ -342,11 +389,14 @@ export default {
     };
 
     onLoad(() => {
-      loadUserInfo();
+      console.log("[个人中心] onLoad 触发");
+      loadUserInfo(false);
     });
 
     onShow(() => {
-      loadUserInfo();
+      console.log("[个人中心] onShow 触发");
+      // 每次显示页面时强制刷新角色数据，避免缓存问题
+      loadUserInfo(true);
     });
 
     return {
