@@ -121,7 +121,7 @@
 
 <script lang="ts">
 import { ref, computed, onMounted } from "vue";
-import { onLoad, onReachBottom } from "@dcloudio/uni-app";
+import { onLoad, onReachBottom, onShow, onPullDownRefresh } from "@dcloudio/uni-app";
 import { getProducts } from "@/api/product";
 import { getBanners } from "@/api/banner";
 import { getHomeKingkongItems } from "@/api/home";
@@ -138,6 +138,7 @@ export default {
     const hasMore = ref(true);
     const page = ref(1);
     const pageSize = 20;
+    const lastProductsLoadedAt = ref<number>(0);
 
     // 双列表瀑布流：将商品列表分成两列
     const leftColumnProducts = computed(() => {
@@ -219,7 +220,8 @@ export default {
 
         if (refresh) {
           products.value = result;
-          page.value = 1;
+          // page 表示“下一页要加载的页码”，刷新后应从第 2 页开始
+          page.value = 2;
         } else {
           products.value.push(...result);
         }
@@ -228,6 +230,7 @@ export default {
         if (!refresh) {
           page.value++;
         }
+        lastProductsLoadedAt.value = Date.now();
       } catch (error) {
         console.error("加载商品失败:", error);
         uni.showToast({
@@ -349,6 +352,20 @@ export default {
       loadBanners();
       loadKingkongItems();
       loadProducts(true);
+    });
+
+    // tabBar 切换回来不会触发 onLoad，这里做一次“回到首页自动刷新”
+    onShow(() => {
+      // 避免频繁刷新：10 秒内不重复拉
+      if (Date.now() - lastProductsLoadedAt.value > 10_000) {
+        loadProducts(true);
+      }
+    });
+
+    // 下拉刷新
+    onPullDownRefresh(async () => {
+      await loadProducts(true);
+      uni.stopPullDownRefresh();
     });
 
 
@@ -523,6 +540,14 @@ export default {
   padding: 20rpx;
 }
 
+.product-name-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12rpx;
+  margin-bottom: 12rpx;
+}
+
 .product-name {
   font-size: 28rpx;
   color: #333;
@@ -532,6 +557,31 @@ export default {
   line-clamp: 2;
   overflow: hidden;
   margin-bottom: 12rpx;
+}
+
+.product-name-row .product-name {
+  margin-bottom: 0;
+  flex: 1;
+}
+
+.product-status-badge {
+  flex-shrink: 0;
+  padding: 6rpx 12rpx;
+  border-radius: 999rpx;
+  border: 1rpx solid transparent;
+  backdrop-filter: blur(8rpx);
+}
+
+.product-status-badge.off-shelf {
+  background-color: rgba(0, 0, 0, 0.55);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.badge-text {
+  font-size: 20rpx;
+  color: #fff;
+  font-weight: 600;
+  line-height: 1;
 }
 
 .product-price-row {

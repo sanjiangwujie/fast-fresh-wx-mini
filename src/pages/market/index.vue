@@ -6,9 +6,10 @@
         <text class="subtitle">平台在售商品一览</text>
       </view>
       <view class="top-actions">
-        <view class="btn ghost" @click="handleRefresh" :class="{ disabled: loading }">刷新</view>
-        <button class="btn ghost share-btn" open-type="share">分享</button>
-        <view class="btn primary" @click="handleSavePoster">保存图片</view>
+        <button class="btn ghost" :disabled="loading" @click="handleRefresh">刷新</button>
+        <button class="btn ghost" open-type="share">分享</button>
+        <button class="btn ghost" @click="handleExportExcel">导出</button>
+        <button class="btn primary" @click="handleSavePoster">保存图片</button>
       </view>
     </view>
 
@@ -20,9 +21,9 @@
     <view class="table">
       <scroll-view scroll-x class="table-scroll">
       <view class="thead">
-        <text class="th name">品名</text>
-        <text class="th category">分类</text>
         <text class="th origin">产地</text>
+        <text class="th category">分类</text>
+        <text class="th name">品名</text>
         <text class="th spec">毛/净</text>
         <text class="th price">价格</text>
       </view>
@@ -42,9 +43,9 @@
             <text class="group-count">{{ group.items.length }}</text>
           </view>
           <view v-for="item in group.items" :key="String(item.id)" class="tr">
-            <text class="td name">{{ item.name }}</text>
-            <text class="td category">{{ formatCategory(item) }}</text>
             <text class="td origin">{{ formatOrigin(item) }}</text>
+            <text class="td category">{{ formatCategory(item) }}</text>
+            <text class="td name">{{ item.name }}</text>
             <text class="td spec">{{ formatSpec(item) }}</text>
             <text class="td price">{{ formatPriceWithUnit(item) }}</text>
           </view>
@@ -155,8 +156,8 @@ export default {
       const gw = p.gross_weight != null ? Number(p.gross_weight) : NaN;
       const nw = p.net_weight != null ? Number(p.net_weight) : NaN;
       const fmt = (n: number) => (Number.isFinite(n) ? (Math.abs(n - Math.round(n)) < 1e-6 ? String(Math.round(n)) : n.toFixed(2)) : "-");
-      const suffix = retailUnit ? `(${retailUnit})` : "";
-      return `毛${fmt(gw)}/净${fmt(nw)}${suffix}`;
+      const suffix = retailUnit ? `（${retailUnit}）` : "";
+      return `${fmt(gw)}/${fmt(nw)}${suffix}`;
     };
 
     const load = async () => {
@@ -184,6 +185,123 @@ export default {
 
     const handleRefresh = async () => {
       await load();
+    };
+
+    const handleExportExcel = async () => {
+      if (products.value.length === 0) {
+        uni.showToast({ title: "暂无数据", icon: "none" });
+        return;
+      }
+
+      // 仅在微信小程序侧实现（用本地文件系统写入并打开）
+      // #ifdef MP-WEIXIN
+      try {
+        uni.showLoading({ title: "导出中..." });
+
+        const escapeHtml = (s: string) =>
+          String(s || "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+
+        const now = new Date();
+        const pad = (n: number) => String(n).padStart(2, "0");
+        const ts = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+        const title = "平台实时行情";
+        const updated = lastUpdatedText.value || "";
+
+        // 组装表格行（不做合并单元格，Excel 也能一览）
+        const rows: Array<{ origin: string; category: string; name: string; spec: string; price: string }> = [];
+        for (const g of grouped.value) {
+          for (const p of g.items) {
+            rows.push({
+              origin: formatOrigin(p),
+              category: formatCategory(p),
+              name: String(p.name || ""),
+              spec: formatSpec(p),
+              price: formatPriceWithUnit(p),
+            });
+          }
+        }
+
+        // 使用更“瘦”的 HTML 表格生成 .xls（减少文件体积）
+        const tableHeader =
+          "<tr><th>产地</th><th>分类</th><th>品名</th><th>毛/净</th><th>价格</th></tr>";
+        const tableBody = rows
+          .map(
+            (r) =>
+              `<tr><td>${escapeHtml(r.origin)}</td><td>${escapeHtml(r.category)}</td><td>${escapeHtml(
+                r.name
+              )}</td><td>${escapeHtml(r.spec)}</td><td>${escapeHtml(r.price)}</td></tr>`
+          )
+          .join("");
+        const html =
+          `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(
+            title
+          )}</title></head><body>` +
+          `<h3>${escapeHtml(title)}</h3>` +
+          `<div>更新时间：${escapeHtml(updated)}　　在售：${totalCount.value} 个</div>` +
+          `<table border="1" cellspacing="0" cellpadding="4"><thead>${tableHeader}</thead><tbody>${tableBody}</tbody></table>` +
+          `</body></html>`;
+
+        // 写入到用户文件目录
+        const fs = (uni as any).getFileSystemManager?.();
+        const wxAny = (globalThis as any).wx;
+        const userPath = wxAny?.env?.USER_DATA_PATH || "";
+        const prefix = "market-export-";
+        const filePath = `${userPath}/${prefix}${ts}.xls`;
+
+        // 先清理旧导出文件，避免 USER_DATA_PATH 累积占满导致写入失败
+        try {
+          const files: string[] = fs.readdirSync(userPath) || [];
+          for (const f of files) {
+            if (typeof f === "string" && f.startsWith(prefix) && f.endsWith(".xls")) {
+              try {
+                fs.unlinkSync(`${userPath}/${f}`);
+              } catch {
+                // ignore
+              }
+            }
+          }
+        } catch {
+          // ignore
+        }
+
+        await new Promise<void>((resolve, reject) => {
+          fs.writeFile({
+            filePath,
+            data: html,
+            encoding: "utf8",
+            success: () => resolve(),
+            fail: (err: any) => reject(err),
+          });
+        });
+
+        uni.hideLoading();
+        uni.openDocument({
+          filePath,
+          showMenu: true, // 允许用户转发/保存
+          success: () => {
+            // 打开成功
+          },
+          fail: (err) => {
+            console.error("[行情] 打开Excel失败:", err);
+            uni.showToast({ title: "打开文件失败", icon: "none" });
+          },
+        });
+      } catch (e) {
+        console.error("[行情] 导出Excel失败:", e);
+        uni.hideLoading();
+        uni.showToast({ title: "导出失败", icon: "none" });
+      }
+      return;
+      // #endif
+
+      // #ifndef MP-WEIXIN
+      uni.showToast({ title: "当前平台暂不支持导出", icon: "none" });
+      // #endif
     };
 
     const handleSavePoster = async () => {
@@ -252,14 +370,14 @@ export default {
         // 表头文字
         ctx.setFillStyle("#333333");
         ctx.setFontSize(Math.floor(24 * rpx));
-        const colNameX = padding + Math.floor(10 * rpx);
+        const colOriginX = padding + Math.floor(10 * rpx);
         const colCategoryX = padding + Math.floor(260 * rpx);
-        const colOriginX = padding + Math.floor(520 * rpx);
+        const colNameX = padding + Math.floor(520 * rpx);
         const colSpecX = padding + Math.floor(780 * rpx);
         const colPriceX = padding + Math.floor(1040 * rpx);
-        ctx.fillText("品名", colNameX, tableTop + Math.floor(32 * rpx));
-        ctx.fillText("分类", colCategoryX, tableTop + Math.floor(32 * rpx));
         ctx.fillText("产地", colOriginX, tableTop + Math.floor(32 * rpx));
+        ctx.fillText("分类", colCategoryX, tableTop + Math.floor(32 * rpx));
+        ctx.fillText("品名", colNameX, tableTop + Math.floor(32 * rpx));
         ctx.fillText("毛/净", colSpecX, tableTop + Math.floor(32 * rpx));
         ctx.fillText("价格", colPriceX, tableTop + Math.floor(32 * rpx));
 
@@ -277,15 +395,16 @@ export default {
           if (row.kind === "group") {
             ctx.setFillStyle("#2ea517");
             ctx.setFontSize(Math.floor(22 * rpx));
-            ctx.fillText(row.text, colNameX, y + Math.floor(30 * rpx));
+            ctx.fillText(row.text, colOriginX, y + Math.floor(30 * rpx));
           } else {
             ctx.setFillStyle("#111111");
             ctx.setFontSize(Math.floor(22 * rpx));
-            ctx.fillText(truncate(row.name, 10), colNameX, y + Math.floor(30 * rpx));
-            ctx.setFillStyle("#555555");
-            ctx.fillText(truncate(row.category, 8), colCategoryX, y + Math.floor(30 * rpx));
             ctx.setFillStyle("#555555");
             ctx.fillText(truncate(row.origin, 7), colOriginX, y + Math.floor(30 * rpx));
+            ctx.setFillStyle("#555555");
+            ctx.fillText(truncate(row.category, 8), colCategoryX, y + Math.floor(30 * rpx));
+            ctx.setFillStyle("#111111");
+            ctx.fillText(truncate(row.name, 10), colNameX, y + Math.floor(30 * rpx));
             ctx.setFillStyle("#555555");
             ctx.fillText(truncate(row.spec, 10), colSpecX, y + Math.floor(30 * rpx));
             ctx.setFillStyle("#d4237a");
@@ -386,6 +505,7 @@ export default {
       formatOrigin,
       formatSpec,
       handleRefresh,
+      handleExportExcel,
       handleSavePoster,
     };
   },
@@ -405,8 +525,9 @@ export default {
   border-radius: 16rpx;
   padding: 24rpx;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 18rpx;
 }
 
 .title {
@@ -425,23 +546,27 @@ export default {
 .top-actions {
   display: flex;
   align-items: center;
-  gap: 16rpx;
+  justify-content: flex-end;
+  gap: 12rpx;
+  flex-wrap: wrap;
 }
 
 .btn {
   height: 64rpx;
-  padding: 0 20rpx;
+  padding: 0 22rpx;
   border-radius: 999rpx;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   font-size: 26rpx;
   box-sizing: border-box;
+  margin: 0;
+  line-height: 64rpx;
+  white-space: nowrap;
 }
 
-.share-btn {
-  line-height: 64rpx;
-  margin: 0;
+.btn::after {
+  border: none;
 }
 
 .btn.primary {
@@ -455,6 +580,10 @@ export default {
 }
 
 .btn.disabled {
+  opacity: 0.5;
+}
+
+.btn[disabled] {
   opacity: 0.5;
 }
 

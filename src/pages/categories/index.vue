@@ -55,7 +55,12 @@
               >
                 <image class="product-image" :src="item.image_url || ''" mode="aspectFill" />
                 <view class="product-info">
-                  <text class="product-name">{{ item.name }}</text>
+                  <view class="product-name-row">
+                    <text class="product-name">{{ item.name }}</text>
+                    <view class="product-status-badge off-shelf" v-if="item.is_off_shelf">
+                      <text class="badge-text">已下架</text>
+                    </view>
+                  </view>
                   <view class="product-price-row">
                     <text class="product-price">¥{{ item.unit_price || 0 }}</text>
                     <text class="product-unit" v-if="item.unit">/{{ item.unit }}</text>
@@ -78,7 +83,12 @@
               >
                 <image class="product-image" :src="item.image_url || ''" mode="aspectFill" />
                 <view class="product-info">
-                  <text class="product-name">{{ item.name }}</text>
+                  <view class="product-name-row">
+                    <text class="product-name">{{ item.name }}</text>
+                    <view class="product-status-badge off-shelf" v-if="item.is_off_shelf">
+                      <text class="badge-text">已下架</text>
+                    </view>
+                  </view>
                   <view class="product-price-row">
                     <text class="product-price">¥{{ item.unit_price || 0 }}</text>
                     <text class="product-unit" v-if="item.unit">/{{ item.unit }}</text>
@@ -107,7 +117,7 @@
 
 <script lang="ts">
 import { ref, computed, onMounted, watch } from "vue";
-import { onLoad, onShow } from "@dcloudio/uni-app";
+import { onLoad, onShow, onPullDownRefresh } from "@dcloudio/uni-app";
 import { getProducts } from "@/api/product";
 import { getCategories, getCategoryNames } from "@/api/category";
 import type { Products, Categories, Products_Bool_Exp } from "@/types/graphql";
@@ -129,6 +139,7 @@ export default {
     const hasMore = ref(true);
     const page = ref(1);
     const pageSize = 20;
+    const lastProductsLoadedAt = ref<number>(0);
 
     // 双列表瀑布流：将商品列表分成两列
     const leftColumnProducts = computed(() => {
@@ -246,7 +257,8 @@ export default {
 
         if (refresh) {
           products.value = result;
-          page.value = 1;
+          // page 表示“下一页要加载的页码”，刷新后应从第 2 页开始
+          page.value = 2;
         } else {
           products.value.push(...result);
         }
@@ -255,6 +267,7 @@ export default {
         if (!refresh) {
           page.value++;
         }
+        lastProductsLoadedAt.value = Date.now();
       } catch (error) {
         console.error("加载商品失败:", error);
         uni.showToast({
@@ -369,7 +382,19 @@ export default {
       if (categoryName) {
         uni.removeStorageSync("category_name_param");
         selectCategoryByName(decodeURIComponent(categoryName));
+        return;
       }
+
+      // 正常切回分类页时自动刷新商品列表（节流，避免频繁请求）
+      if (Date.now() - lastProductsLoadedAt.value > 10_000) {
+        loadProducts(true);
+      }
+    });
+
+    // 下拉刷新（需要 pages.json 为该页开启 enablePullDownRefresh）
+    onPullDownRefresh(async () => {
+      await loadProducts(true);
+      uni.stopPullDownRefresh();
     });
 
 
@@ -555,6 +580,14 @@ export default {
   padding: 20rpx;
 }
 
+.product-name-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12rpx;
+  margin-bottom: 12rpx;
+}
+
 .product-name {
   font-size: 28rpx;
   color: #333;
@@ -563,7 +596,29 @@ export default {
   -webkit-line-clamp: 2;
   line-clamp: 2;
   overflow: hidden;
-  margin-bottom: 12rpx;
+  margin-bottom: 0;
+  flex: 1;
+}
+
+.product-status-badge {
+  flex-shrink: 0;
+  padding: 6rpx 12rpx;
+  border-radius: 999rpx;
+  font-size: 20rpx;
+  line-height: 1;
+  border: 1rpx solid transparent;
+  backdrop-filter: blur(8rpx);
+}
+
+.product-status-badge.off-shelf {
+  background-color: rgba(0, 0, 0, 0.55);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.badge-text {
+  font-size: 20rpx;
+  color: #fff;
+  font-weight: 600;
 }
 
 .product-price-row {

@@ -9,13 +9,14 @@
     
     <scroll-view class="scroll-view" scroll-y v-if="product">
       <!-- 产品图片和视频轮播 -->
-      <view class="product-image-section">
+      <view class="product-image-section" :style="{ height: swiperHeightRpx + 'rpx' }">
         <swiper 
           class="product-swiper" 
           :indicator-dots="false" 
           :autoplay="false" 
           :circular="true" 
           @change="handleSwiperChange"
+          :style="{ height: swiperHeightRpx + 'rpx' }"
         >
           <swiper-item v-for="(media, index) in productMedia" :key="media.id || index">
             <!-- 媒体分类标签 -->
@@ -31,27 +32,28 @@
               v-if="media.type === 'image'" 
               class="product-image" 
               :src="media.url" 
-              mode="aspectFill" 
+              mode="aspectFit"
+              @load="handleImageLoad(index, $event)"
             />
             <!-- 视频 -->
             <view 
               v-else-if="media.type === 'video'" 
               class="video-wrapper"
-              @click="handleVideoWrapperClick(index)"
             >
               <video
                 :id="`video-${index}`"
                 class="product-video"
                 :src="media.url"
                 :poster="media.poster"
-                :controls="currentVideoIndex === index"
+                :controls="true"
                 :show-center-play-btn="currentVideoIndex !== index || !isVideoPlaying"
-                :enable-play-gesture="true"
-                :show-play-btn="currentVideoIndex !== index || !isVideoPlaying"
+                :enable-play-gesture="false"
+                :show-play-btn="true"
                 :enable-fullscreen="true"
                 :show-fullscreen-btn="currentVideoIndex === index"
                 object-fit="contain"
                 :autoplay="false"
+                @loadedmetadata="handleVideoMeta(index, $event)"
                 @play="handleVideoPlay(index)"
                 @pause="handleVideoPause(index)"
                 @ended="handleVideoEnded(index)"
@@ -110,9 +112,6 @@
           <view class="product-status-badge off-shelf" v-if="product.is_off_shelf">
             <text class="badge-text">已下架</text>
           </view>
-        </view>
-        <view class="product-status-tip" v-if="product.is_off_shelf">
-          <text class="tip-text">该商品已下架，暂时无法购买</text>
         </view>
       </view>
 
@@ -403,6 +402,9 @@ export default {
     const currentVideoIndex = ref(-1);
     const isVideoPlaying = ref(false);
     const videoErrors = ref<Set<number>>(new Set()); // 记录加载失败的视频索引
+    const swiperHeightRpx = ref(750);
+    const videoMetaMap = ref<Record<number, { w: number; h: number }>>({});
+    const imageMetaMap = ref<Record<number, { w: number; h: number }>>({});
     const priceForecast = ref<PriceForecast | null>(null);
     const forecastLoading = ref(false);
     const priceHistory = ref<PriceHistoryItem[]>([]);
@@ -543,6 +545,54 @@ export default {
       currentImageIndex.value = newIndex;
       currentVideoIndex.value = -1;
       isVideoPlaying.value = false;
+
+      // 根据媒体类型调整容器高度：图片/视频都按真实宽高自适应（拿不到时用默认高度）
+      const current = productMedia.value[newIndex];
+      if (current?.type === "video") {
+        const meta = videoMetaMap.value[newIndex];
+        swiperHeightRpx.value = meta?.w && meta?.h ? calcMediaHeightRpx(meta.w, meta.h) : 750;
+      } else if (current?.type === "image") {
+        const meta = imageMetaMap.value[newIndex];
+        swiperHeightRpx.value = meta?.w && meta?.h ? calcMediaHeightRpx(meta.w, meta.h) : 750;
+      } else {
+        swiperHeightRpx.value = 750;
+      }
+    };
+
+    const calcMediaHeightRpx = (w: number, h: number) => {
+      const sys = uni.getSystemInfoSync();
+      const rpx = sys.windowWidth / 750;
+      const widthPx = sys.windowWidth;
+      const ratio = h / w; // height per width
+      const heightPx = Math.max(1, widthPx * ratio);
+      const heightRpx = heightPx / rpx;
+      // 限制一下范围，避免极端视频把页面撑得过长
+      return Math.max(520, Math.min(1100, Math.round(heightRpx)));
+    };
+
+    const handleVideoMeta = (index: number, e: any) => {
+      // 微信/uni 的不同平台字段可能不同，这里做兼容读取
+      const detail = e?.detail || {};
+      const w = Number(detail.width || detail.videoWidth || detail.naturalSize?.width || 0);
+      const h = Number(detail.height || detail.videoHeight || detail.naturalSize?.height || 0);
+      if (!w || !h) return;
+      videoMetaMap.value = { ...videoMetaMap.value, [index]: { w, h } };
+      // 如果当前就是这个视频，立刻调整高度
+      if (currentImageIndex.value === index) {
+        swiperHeightRpx.value = calcMediaHeightRpx(w, h);
+      }
+    };
+
+    const handleImageLoad = (index: number, e: any) => {
+      const detail = e?.detail || {};
+      // 不同端字段可能不同，这里做兼容读取
+      const w = Number(detail.width || detail.naturalWidth || 0);
+      const h = Number(detail.height || detail.naturalHeight || 0);
+      if (!w || !h) return;
+      imageMetaMap.value = { ...imageMetaMap.value, [index]: { w, h } };
+      if (currentImageIndex.value === index) {
+        swiperHeightRpx.value = calcMediaHeightRpx(w, h);
+      }
     };
 
     // 视频点击播放
@@ -552,20 +602,6 @@ export default {
       } else {
         playVideo(index);
       }
-    };
-
-    // 视频容器点击处理：视频播放时点击暂停，暂停时点击继续播放
-    const handleVideoWrapperClick = (index: number) => {
-      // 如果视频正在播放，点击暂停
-      if (currentVideoIndex.value === index && isVideoPlaying.value) {
-        pauseVideo(index);
-      } 
-      // 如果视频已暂停（当前视频但未播放），点击继续播放
-      else if (currentVideoIndex.value === index && !isVideoPlaying.value) {
-        playVideo(index);
-      }
-      // 如果视频未开始播放，点击播放（通过播放按钮覆盖层处理）
-      // 这里不做处理，让播放按钮覆盖层的点击事件处理
     };
 
     // 播放视频
@@ -951,7 +987,9 @@ export default {
       getChangeDirectionClass,
       getChangeAmount,
       getMediaCategoryText,
-      handleVideoWrapperClick,
+      swiperHeightRpx,
+      handleVideoMeta,
+      handleImageLoad,
     };
   },
 };
@@ -1008,7 +1046,7 @@ export default {
 .product-image-section {
   position: relative;
   width: 100%;
-  height: 750rpx;
+  /* 高度改为动态（template 里绑定） */
   background-color: #fff;
 }
 
@@ -1251,6 +1289,10 @@ export default {
 
 .product-name-row {
   margin-top: 12rpx;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12rpx;
 }
 
 .product-name-full {
@@ -1258,6 +1300,7 @@ export default {
   color: #333;
   font-weight: 500;
   line-height: 1.5;
+  flex: 1;
 }
 
 /* 产品详细指标 */
@@ -1726,18 +1769,26 @@ export default {
 }
 
 .product-status-badge {
-  padding: 6rpx 16rpx;
-  border-radius: 8rpx;
-  font-size: 22rpx;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6rpx 12rpx;
+  border-radius: 999rpx;
+  border: 1rpx solid transparent;
+  backdrop-filter: blur(8rpx);
 }
 
 .product-status-badge.off-shelf {
-  background-color: #fff3cd;
+  background-color: rgba(0, 0, 0, 0.55);
+  border-color: rgba(255, 255, 255, 0.25);
 }
 
 .product-status-badge.off-shelf .badge-text {
-  color: #856404;
-  font-weight: 500;
+  color: #fff;
+  font-weight: 600;
+  font-size: 20rpx;
+  line-height: 1;
 }
 
 .product-status-tip {

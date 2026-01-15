@@ -9,7 +9,8 @@
 		{
 			"path": "pages/categories/index",
 			"style": {
-				"navigationBarTitleText": "分类"
+				"navigationBarTitleText": "分类",
+				"enablePullDownRefresh": true
 			}
 		},
 		{
