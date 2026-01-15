@@ -3,6 +3,7 @@
  */
 
 import { API_BASE_URL } from "@/project-config";
+import { getUserRoles as fetchUserRoles } from "@/api/user";
 
 export interface LoginResponse {
   userId: string;
@@ -103,8 +104,7 @@ export async function saveLoginInfo(response: LoginResponse): Promise<void> {
   
   // 登录时立即获取并保存用户角色，减少后续请求
   try {
-    const { getUserRolesForceRefresh } = await import("@/api/user");
-    const roles = await getUserRolesForceRefresh(response.userId);
+    const roles = await fetchUserRoles(response.userId);
     uni.setStorageSync("userRoles", roles);
     console.log("[登录] 已保存用户角色:", roles);
   } catch (error) {

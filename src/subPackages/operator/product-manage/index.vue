@@ -36,6 +36,9 @@
             <text class="product-arrow">›</text>
           </view>
           <view class="product-actions">
+            <view class="action-btn preview" @click.stop="handlePreviewProduct(product)">
+              <text class="action-btn-text">预览</text>
+            </view>
             <view 
               class="action-btn" 
               :class="{ 'off-shelf': !product.is_off_shelf, 'on-shelf': product.is_off_shelf }"
@@ -133,6 +136,14 @@ export default {
       });
     };
 
+    // 预览商品（跳转到用户端商品详情页）
+    const handlePreviewProduct = (product: Products) => {
+      if (!product?.id) return;
+      uni.navigateTo({
+        url: `/pages/product/detail?id=${product.id}`,
+      });
+    };
+
     // 从批次生成商品
     const handleCreateProduct = () => {
       uni.navigateTo({
@@ -208,6 +219,7 @@ export default {
       hasMore,
       loadMore,
       handleViewProduct,
+      handlePreviewProduct,
       handleCreateProduct,
       handleToggleShelf,
       handleDeleteProduct,
@@ -345,6 +357,14 @@ export default {
   border-radius: 8rpx;
   text-align: center;
   font-size: 24rpx;
+}
+
+.action-btn.preview {
+  background-color: #e6f7ff;
+}
+
+.action-btn.preview .action-btn-text {
+  color: #1890ff;
 }
 
 .action-btn.off-shelf {

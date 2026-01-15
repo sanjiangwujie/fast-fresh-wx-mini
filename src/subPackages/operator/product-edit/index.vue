@@ -131,28 +131,28 @@
           </view>
         </view>
         <view class="form-item">
-          <text class="form-label">单价 <text class="required">*</text></text>
+          <text class="form-label">单价(元/{{ form.unit || "包装单位" }}) <text class="required">*</text></text>
           <input class="form-input" v-model="form.unit_price" type="digit" placeholder="请输入单价" />
         </view>
         <view class="form-item">
-          <text class="form-label">库存 <text class="required">*</text></text>
+          <text class="form-label">库存({{ form.unit || "包装单位" }}) <text class="required">*</text></text>
           <input class="form-input" v-model="form.unit_stock" type="number" placeholder="请输入库存" />
         </view>
         <view class="form-item">
-          <text class="form-label">单位 <text class="readonly-hint">（不可修改）</text></text>
+          <text class="form-label">包装单位 <text class="required">*</text> <text class="readonly-hint">（不可修改）</text></text>
           <input class="form-input readonly" v-model="form.unit" placeholder="单位" disabled />
         </view>
         <view class="form-item">
-          <text class="form-label">毛重(kg) <text class="required">*</text></text>
+          <text class="form-label">零售单位 <text class="required">*</text></text>
+          <input class="form-input" v-model="form.retail_unit" placeholder="如：个、斤、kg" maxlength="10" />
+        </view>
+        <view class="form-item">
+          <text class="form-label">每{{ form.unit || "包装单位" }}毛重({{ form.retail_unit || "零售单位" }}) <text class="required">*</text></text>
           <input class="form-input" v-model="form.gross_weight" type="digit" placeholder="请输入毛重" />
         </view>
         <view class="form-item">
-          <text class="form-label">净重(kg) <text class="required">*</text></text>
+          <text class="form-label">每{{ form.unit || "包装单位" }}净重({{ form.retail_unit || "零售单位" }}) <text class="required">*</text></text>
           <input class="form-input" v-model="form.net_weight" type="digit" placeholder="请输入净重" />
-        </view>
-        <view class="form-item">
-          <text class="form-label">零售单位</text>
-          <input class="form-input" v-model="form.retail_unit" placeholder="如：个、斤、kg" maxlength="10" />
         </view>
       </view>
 
@@ -280,8 +280,9 @@ export default {
         return;
       }
 
+      // 使用 categories 表的 name 字段
       const categoryNames = categories.value.map((c) => {
-        return c.name || c.category_name || `分类${c.id}`;
+        return c.name || `分类${c.id}`;
       });
 
       if (categoryNames.length === 0) {
@@ -342,7 +343,7 @@ export default {
     const getSelectedCategoryName = () => {
       if (!form.value.category_categories) return "请选择分类";
       const category = categories.value.find((c) => c.id === form.value.category_categories);
-      return category?.name || category?.category_name || "请选择分类";
+      return category?.name || "请选择分类";
     };
 
     // 获取选中的产地名称
@@ -488,7 +489,7 @@ export default {
       if (submitting.value) return;
 
       // 验证
-      if (!form.value.name || !form.value.unit_price || !form.value.unit_stock || !form.value.gross_weight || !form.value.net_weight) {
+      if (!form.value.name || !form.value.unit || !form.value.unit_price || !form.value.unit_stock || !form.value.retail_unit || !form.value.gross_weight || !form.value.net_weight) {
         uni.showToast({
           title: "请填写必填项",
           icon: "none",
@@ -508,7 +509,7 @@ export default {
           origin_origins: form.value.origin_origins || null,
           gross_weight: Number(form.value.gross_weight),
           net_weight: Number(form.value.net_weight),
-          retail_unit: form.value.retail_unit || null,
+          retail_unit: form.value.retail_unit,
           detail_html: form.value.detail_html || null,
           after_sales_html: form.value.after_sales_html || null,
         });

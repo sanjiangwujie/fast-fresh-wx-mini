@@ -14,8 +14,8 @@
           <view class="batch-info">
             <text class="batch-id">批次 #{{ batch.id }}</text>
             <text class="batch-time">{{ formatTime(batch.created_at) }}</text>
-            <view class="batch-status" v-if="batch.product">
-              <text class="status-text status-active">已生成商品</text>
+            <view class="batch-status" v-if="getBatchProductsCount(batch) > 0">
+              <text class="status-text status-active">已生成 {{ getBatchProductsCount(batch) }} 个商品</text>
             </view>
             <view class="batch-status" v-else>
               <text class="status-text status-pending">待生成商品</text>
@@ -53,6 +53,14 @@ export default {
     const offset = ref(0);
     const limit = 20;
     const farmerId = ref<string | number | null>(null);
+
+    const getBatchProductsCount = (batch: any): number => {
+      const count = batch?.products_aggregate?.aggregate?.count;
+      if (typeof count === "number") return count;
+      if (typeof count === "string") return Number(count) || 0;
+      if (Array.isArray(batch?.products)) return batch.products.length;
+      return 0;
+    };
 
     // 加载批次列表
     const loadBatches = async (reset = false) => {
@@ -177,6 +185,7 @@ export default {
       formatTime,
       handleViewBatch,
       handleAddBatch,
+      getBatchProductsCount,
     };
   },
 };

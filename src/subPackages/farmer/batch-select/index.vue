@@ -11,7 +11,7 @@
           <view class="batch-info">
             <text class="batch-id">批次 #{{ batch.id }}</text>
             <text class="batch-time">{{ formatTime(batch.created_at) }}</text>
-            <view class="batch-status" v-if="batch.product">
+            <view class="batch-status" v-if="batch.products && batch.products.length > 0">
               <text class="status-text status-active">已生成商品</text>
             </view>
             <view class="batch-status" v-else>

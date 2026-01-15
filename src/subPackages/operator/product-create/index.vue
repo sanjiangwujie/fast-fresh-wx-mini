@@ -106,74 +106,103 @@
 
       <!-- 商品信息 -->
       <view class="section" v-if="selectedBatch">
-        <view class="section-title">商品信息</view>
-        <view class="form-item">
-          <text class="form-label">商品名称 <text class="required">*</text></text>
-          <input class="form-input" v-model="form.name" placeholder="请输入商品名称" maxlength="50" />
+        <view class="section-header">
+          <text class="section-title">商品信息</text>
+          <view class="add-product-btn" @click="handleAddProduct" :class="{ disabled: submitting }">
+            <text class="add-product-btn-text">新增商品</text>
+          </view>
         </view>
-        <view class="form-item">
-          <text class="form-label">商品图片</text>
-          <view class="image-upload" @click="handleChooseImage" v-if="!form.image_url">
-            <view class="upload-placeholder">
-              <text class="upload-icon">📷</text>
-              <text class="upload-text">点击上传图片</text>
+
+        <view class="product-form-card" v-for="(p, idx) in products" :key="p._key">
+          <view class="product-form-card-header">
+            <text class="product-form-card-title">商品 {{ idx + 1 }}</text>
+            <view
+              class="product-form-card-remove"
+              v-if="products.length > 1"
+              @click="handleRemoveProduct(idx)"
+              :class="{ disabled: submitting }"
+            >
+              删除
             </view>
           </view>
-          <view class="image-preview" v-else>
-            <image class="preview-image" :src="form.image_url" mode="aspectFill" @click="handlePreviewImage" />
-            <view class="image-actions">
-              <view class="action-btn" @click="handleChooseImage">重新上传</view>
-              <view class="action-btn delete" @click="handleDeleteImage">删除</view>
+
+          <view class="form-item">
+            <text class="form-label">商品名称 <text class="required">*</text></text>
+            <input class="form-input" v-model="p.name" placeholder="请输入商品名称" maxlength="50" />
+          </view>
+
+          <view class="form-item">
+            <text class="form-label">商品图片</text>
+            <view class="image-upload" @click="handleChooseImage(idx)" v-if="!p.image_url">
+              <view class="upload-placeholder">
+                <text class="upload-icon">📷</text>
+                <text class="upload-text">点击上传图片</text>
+              </view>
+            </view>
+            <view class="image-preview" v-else>
+              <image class="preview-image" :src="p.image_url" mode="aspectFill" @click="handlePreviewImage(idx)" />
+              <view class="image-actions">
+                <view class="action-btn" @click="handleChooseImage(idx)">重新上传</view>
+                <view class="action-btn delete" @click="handleDeleteImage(idx)">删除</view>
+              </view>
+            </view>
+            <view class="image-tip" v-if="uploadingIndex === idx">
+              <text class="tip-text">上传中...</text>
+            </view>
+            <view class="image-tip" v-else-if="selectedBatch && selectedBatch.image_url && !p.image_url">
+              <text class="tip-text">可直接使用批次图片</text>
             </view>
           </view>
-          <view class="image-tip" v-if="uploading">
-            <text class="tip-text">上传中...</text>
+
+          <view class="form-item">
+            <text class="form-label">分类</text>
+            <view class="selector" @click="handleSelectCategory(p._key)">
+              <text class="selector-text" :class="{ placeholder: !p.category_categories }">
+                {{ getSelectedCategoryName(idx) }}
+              </text>
+              <text class="selector-arrow">›</text>
+            </view>
           </view>
-          <view class="image-tip" v-else-if="selectedBatch && selectedBatch.image_url && !form.image_url">
-            <text class="tip-text">批次图片：{{ selectedBatch.image_url }}</text>
+
+          <view class="form-item">
+            <text class="form-label">产地</text>
+            <view class="selector" @click="handleSelectOrigin(p._key)">
+              <text class="selector-text" :class="{ placeholder: !p.origin_origins }">
+                {{ getSelectedOriginName(idx) }}
+              </text>
+              <text class="selector-arrow">›</text>
+            </view>
           </view>
-        </view>
-        <view class="form-item">
-          <text class="form-label">分类</text>
-          <view class="selector" @click="handleSelectCategory">
-            <text class="selector-text" :class="{ placeholder: !form.category_categories }">
-              {{ getSelectedCategoryName() }}
-            </text>
-            <text class="selector-arrow">›</text>
+
+          <view class="form-item">
+            <text class="form-label">包装单位 <text class="required">*</text></text>
+            <input class="form-input" v-model="p.unit" placeholder="如：箱、盒、件" maxlength="10" />
           </view>
-        </view>
-        <view class="form-item">
-          <text class="form-label">产地</text>
-          <view class="selector" @click="handleSelectOrigin">
-            <text class="selector-text" :class="{ placeholder: !form.origin_origins }">
-              {{ getSelectedOriginName() }}
-            </text>
-            <text class="selector-arrow">›</text>
+
+          <view class="form-item">
+            <text class="form-label">单价(元/{{ p.unit || "包装单位" }}) <text class="required">*</text></text>
+            <input class="form-input" v-model="p.unit_price" type="digit" placeholder="请输入单价" />
           </view>
-        </view>
-        <view class="form-item">
-          <text class="form-label">单价 <text class="required">*</text></text>
-          <input class="form-input" v-model="form.unit_price" type="digit" placeholder="请输入单价" />
-        </view>
-        <view class="form-item">
-          <text class="form-label">库存 <text class="required">*</text></text>
-          <input class="form-input" v-model="form.unit_stock" type="number" placeholder="请输入库存" />
-        </view>
-        <view class="form-item">
-          <text class="form-label">单位</text>
-          <input class="form-input" v-model="form.unit" placeholder="如：箱、斤、kg" maxlength="10" />
-        </view>
-        <view class="form-item">
-          <text class="form-label">毛重(kg) <text class="required">*</text></text>
-          <input class="form-input" v-model="form.gross_weight" type="digit" placeholder="请输入毛重" />
-        </view>
-        <view class="form-item">
-          <text class="form-label">净重(kg) <text class="required">*</text></text>
-          <input class="form-input" v-model="form.net_weight" type="digit" placeholder="请输入净重" />
-        </view>
-        <view class="form-item">
-          <text class="form-label">零售单位</text>
-          <input class="form-input" v-model="form.retail_unit" placeholder="如：个、斤、kg" maxlength="10" />
+
+          <view class="form-item">
+            <text class="form-label">库存({{ p.unit || "包装单位" }}) <text class="required">*</text></text>
+            <input class="form-input" v-model="p.unit_stock" type="number" placeholder="请输入库存" />
+          </view>
+
+          <view class="form-item">
+            <text class="form-label">零售单位 <text class="required">*</text></text>
+            <input class="form-input" v-model="p.retail_unit" placeholder="如：个、斤、kg" maxlength="10" />
+          </view>
+
+          <view class="form-item">
+            <text class="form-label">每{{ p.unit || "包装单位" }}毛重({{ p.retail_unit || "零售单位" }}) <text class="required">*</text></text>
+            <input class="form-input" v-model="p.gross_weight" type="digit" placeholder="请输入毛重" />
+          </view>
+
+          <view class="form-item">
+            <text class="form-label">每{{ p.unit || "包装单位" }}净重({{ p.retail_unit || "零售单位" }}) <text class="required">*</text></text>
+            <input class="form-input" v-model="p.net_weight" type="digit" placeholder="请输入净重" />
+          </view>
         </view>
       </view>
 
@@ -182,18 +211,21 @@
         <view class="section-title">商品详情</view>
         <view class="form-item">
           <text class="form-label">商品详情（HTML）</text>
-          <textarea class="form-textarea" v-model="form.detail_html" placeholder="请输入商品详情，支持HTML格式" maxlength="5000" />
+          <textarea class="form-textarea" v-model="commonDetail.detail_html" placeholder="请输入商品详情，支持HTML格式" maxlength="5000" />
         </view>
         <view class="form-item">
           <text class="form-label">售后须知（HTML）</text>
-          <textarea class="form-textarea" v-model="form.after_sales_html" placeholder="请输入售后须知，支持HTML格式" maxlength="5000" />
+          <textarea class="form-textarea" v-model="commonDetail.after_sales_html" placeholder="请输入售后须知，支持HTML格式" maxlength="5000" />
+        </view>
+        <view class="detail-tip">
+          <text class="detail-tip-text">提示：此处填写的内容会应用到本次创建的所有商品</text>
         </view>
       </view>
 
       <!-- 提交按钮 -->
       <view class="submit-section" v-if="selectedBatch">
         <view class="submit-btn" @click="handleSubmit" :class="{ disabled: submitting }">
-          <text class="submit-btn-text">{{ submitting ? "提交中..." : "创建商品" }}</text>
+          <text class="submit-btn-text">{{ submitting ? submitText : "创建商品" }}</text>
         </view>
       </view>
     </scroll-view>
@@ -201,7 +233,7 @@
 </template>
 
 <script lang="ts">
-import { ref, onMounted } from "vue";
+import { ref } from "vue";
 import { onLoad, onShow } from "@dcloudio/uni-app";
 import { getBatches, getBatchById } from "@/api/batch";
 import { createProduct } from "@/api/product";
@@ -214,23 +246,46 @@ export default {
   setup() {
     const selectedBatch = ref<Batches | null>(null);
     const submitting = ref(false);
-    const uploading = ref(false);
+    const uploadingIndex = ref<number>(-1);
+    const submitText = ref("提交中...");
+    const actionSheetOpen = ref(false);
     const categories = ref<Categories[]>([]);
     const origins = ref<Origins[]>([]);
-    const form = ref({
+
+    type ProductForm = {
+      _key: string;
+      name: string;
+      image_url: string;
+      unit_price: string;
+      unit_stock: string;
+      unit: string;
+      gross_weight: string;
+      net_weight: string;
+      retail_unit: string;
+      category_categories: string | number | null;
+      origin_origins: string | number | null;
+    };
+
+    const commonDetail = ref({
+      detail_html: "",
+      after_sales_html: "",
+    });
+
+    const createEmptyProductForm = (): ProductForm => ({
+      _key: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       name: "",
-      image_url: "",
+      image_url: selectedBatch.value?.image_url || "",
       unit_price: "",
       unit_stock: "",
       unit: "",
       gross_weight: "",
       net_weight: "",
       retail_unit: "",
-      category_categories: null as string | number | null,
-      origin_origins: null as string | number | null,
-      detail_html: "",
-      after_sales_html: "",
+      category_categories: null,
+      origin_origins: null,
     });
+
+    const products = ref<ProductForm[]>([createEmptyProductForm()]);
 
     // 格式化时间
     const formatTime = (time: string) => {
@@ -249,15 +304,6 @@ export default {
     const handleSubmit = async () => {
       if (submitting.value) return;
 
-      // 验证
-      if (!form.value.name || !form.value.unit_price || !form.value.unit_stock || !form.value.gross_weight || !form.value.net_weight) {
-        uni.showToast({
-          title: "请填写必填项",
-          icon: "none",
-        });
-        return;
-      }
-
       if (!selectedBatch.value) {
         uni.showToast({
           title: "请选择批次",
@@ -266,41 +312,59 @@ export default {
         return;
       }
 
+      if (!products.value || products.value.length === 0) {
+        uni.showToast({ title: "请至少添加一个商品", icon: "none" });
+        return;
+      }
+
+      for (let i = 0; i < products.value.length; i++) {
+        const p = products.value[i];
+        if (!p.name || !p.unit || !p.unit_price || !p.unit_stock || !p.retail_unit || !p.gross_weight || !p.net_weight) {
+          uni.showToast({
+            title: `请完善第${i + 1}个商品的必填项`,
+            icon: "none",
+          });
+          return;
+        }
+      }
+
       submitting.value = true;
       try {
-        const result = await createProduct({
-          name: form.value.name,
-          batch_batches: selectedBatch.value.id,
-          image_url: form.value.image_url || null,
-          unit_price: Number(form.value.unit_price),
-          unit_stock: Number(form.value.unit_stock),
-          unit: form.value.unit || null,
-          gross_weight: Number(form.value.gross_weight),
-          net_weight: Number(form.value.net_weight),
-          retail_unit: form.value.retail_unit || null,
-          category_categories: form.value.category_categories || null,
-          origin_origins: form.value.origin_origins || null,
-          detail_html: form.value.detail_html || null,
-          after_sales_html: form.value.after_sales_html || null,
-        });
-
-        if (result) {
-          uni.showToast({
-            title: "创建成功",
-            icon: "success",
+        let successCount = 0;
+        for (let i = 0; i < products.value.length; i++) {
+          submitText.value = `提交中...（${i + 1}/${products.value.length}）`;
+          const p = products.value[i];
+          await createProduct({
+            name: p.name,
+            batch_batches: selectedBatch.value.id,
+            image_url: p.image_url || null,
+            unit_price: Number(p.unit_price),
+            unit_stock: Number(p.unit_stock),
+            unit: p.unit,
+            gross_weight: Number(p.gross_weight),
+            net_weight: Number(p.net_weight),
+            retail_unit: p.retail_unit,
+            category_categories: p.category_categories || null,
+            origin_origins: p.origin_origins || null,
+            detail_html: commonDetail.value.detail_html || null,
+            after_sales_html: commonDetail.value.after_sales_html || null,
           });
-          setTimeout(() => {
-            uni.navigateBack();
-          }, 1500);
+          successCount++;
         }
+
+        uni.showToast({ title: `创建成功（${successCount}个）`, icon: "success" });
+        setTimeout(() => {
+          uni.navigateBack();
+        }, 1200);
       } catch (error) {
         console.error("创建商品失败:", error);
         uni.showToast({
-          title: "创建失败",
+          title: error instanceof Error ? error.message : "创建失败",
           icon: "none",
         });
       } finally {
         submitting.value = false;
+        submitText.value = "提交中...";
       }
     };
 
@@ -337,29 +401,41 @@ export default {
             const batchDetail = await getBatchById(selectedBatchData.id);
             if (batchDetail) {
               selectedBatch.value = batchDetail;
-              // 如果批次有图片，自动同步到商品图片
-              if (batchDetail.image_url && !form.value.image_url) {
-                form.value.image_url = batchDetail.image_url;
+              // 如果批次有图片，自动同步到“尚未设置图片”的商品项
+              if (batchDetail.image_url) {
+                products.value = products.value.map((p) => ({
+                  ...p,
+                  image_url: p.image_url || batchDetail.image_url || "",
+                }));
               }
             } else {
               // 如果加载失败，使用原始数据
               selectedBatch.value = selectedBatchData;
-              if (selectedBatchData.image_url && !form.value.image_url) {
-                form.value.image_url = selectedBatchData.image_url;
+              if (selectedBatchData.image_url) {
+                products.value = products.value.map((p) => ({
+                  ...p,
+                  image_url: p.image_url || selectedBatchData.image_url || "",
+                }));
               }
             }
           } catch (error) {
             console.error("加载批次详情失败:", error);
             // 加载失败时使用原始数据
             selectedBatch.value = selectedBatchData;
-            if (selectedBatchData.image_url && !form.value.image_url) {
-              form.value.image_url = selectedBatchData.image_url;
+            if (selectedBatchData.image_url) {
+              products.value = products.value.map((p) => ({
+                ...p,
+                image_url: p.image_url || selectedBatchData.image_url || "",
+              }));
             }
           }
         } else {
           selectedBatch.value = selectedBatchData;
-          if (selectedBatchData.image_url && !form.value.image_url) {
-            form.value.image_url = selectedBatchData.image_url;
+          if (selectedBatchData.image_url) {
+            products.value = products.value.map((p) => ({
+              ...p,
+              image_url: p.image_url || selectedBatchData.image_url || "",
+            }));
           }
         }
       }
@@ -415,8 +491,20 @@ export default {
       }
     };
 
+    const handleAddProduct = () => {
+      if (submitting.value) return;
+      products.value.push(createEmptyProductForm());
+    };
+
+    const handleRemoveProduct = (idx: number) => {
+      if (submitting.value) return;
+      if (products.value.length <= 1) return;
+      products.value.splice(idx, 1);
+    };
+
     // 选择分类
-    const handleSelectCategory = () => {
+    const handleSelectCategory = (productKey: string) => {
+      if (actionSheetOpen.value) return;
       console.log("[选择分类] 当前分类数据:", categories.value);
       
       if (categories.value.length === 0) {
@@ -429,10 +517,10 @@ export default {
         return;
       }
       
-      // 使用 name 字段，如果没有则使用 category_name
+      // 使用 categories 表的 name 字段
       const categoryNames = categories.value.map((c) => {
-        const name = c.name || c.category_name || `分类${c.id}`;
-        console.log("[选择分类] 分类项:", { id: c.id, name, category_name: c.category_name });
+        const name = c.name || `分类${c.id}`;
+        console.log("[选择分类] 分类项:", { id: c.id, name });
         return name;
       });
       
@@ -446,24 +534,30 @@ export default {
       
       console.log("[选择分类] 显示的分类列表:", categoryNames);
       
+      actionSheetOpen.value = true;
       uni.showActionSheet({
         itemList: categoryNames,
         success: (res) => {
           console.log("[选择分类] 用户选择了索引:", res.tapIndex);
           if (res.tapIndex >= 0 && res.tapIndex < categories.value.length) {
             const selectedCategory = categories.value[res.tapIndex];
-            form.value.category_categories = selectedCategory.id;
+            const idx = products.value.findIndex((p) => p._key === productKey);
+            if (idx >= 0) products.value[idx].category_categories = selectedCategory.id;
             console.log("[选择分类] 已选择分类:", selectedCategory);
           }
         },
         fail: (err) => {
           console.error("选择分类失败:", err);
         },
+        complete: () => {
+          actionSheetOpen.value = false;
+        },
       });
     };
 
     // 选择产地
-    const handleSelectOrigin = () => {
+    const handleSelectOrigin = (productKey: string) => {
+      if (actionSheetOpen.value) return;
       if (origins.value.length === 0) {
         uni.showToast({
           title: "产地数据加载中，请稍候",
@@ -472,7 +566,7 @@ export default {
         return;
       }
       
-      const originNames = origins.value.map((o) => o.name || "");
+      const originNames = origins.value.map((o) => o.name || `产地${o.id}`);
       if (originNames.length === 0) {
         uni.showToast({
           title: "暂无产地数据",
@@ -481,42 +575,49 @@ export default {
         return;
       }
       
+      actionSheetOpen.value = true;
       uni.showActionSheet({
         itemList: originNames,
         success: (res) => {
           if (res.tapIndex >= 0 && res.tapIndex < origins.value.length) {
-            form.value.origin_origins = origins.value[res.tapIndex].id;
+            const idx = products.value.findIndex((p) => p._key === productKey);
+            if (idx >= 0) products.value[idx].origin_origins = origins.value[res.tapIndex].id;
           }
         },
         fail: (err) => {
           console.error("选择产地失败:", err);
         },
+        complete: () => {
+          actionSheetOpen.value = false;
+        },
       });
     };
 
     // 获取选中的分类名称
-    const getSelectedCategoryName = () => {
-      if (!form.value.category_categories) return "请选择分类";
-      const category = categories.value.find((c) => c.id === form.value.category_categories);
-      return category?.name || category?.category_name || "请选择分类";
+    const getSelectedCategoryName = (idx: number) => {
+      const p = products.value[idx];
+      if (!p || !p.category_categories) return "请选择分类";
+      const category = categories.value.find((c) => c.id === p.category_categories);
+      return category?.name || "请选择分类";
     };
 
     // 获取选中的产地名称
-    const getSelectedOriginName = () => {
-      if (!form.value.origin_origins) return "请选择产地";
-      const origin = origins.value.find((o) => o.id === form.value.origin_origins);
+    const getSelectedOriginName = (idx: number) => {
+      const p = products.value[idx];
+      if (!p || !p.origin_origins) return "请选择产地";
+      const origin = origins.value.find((o) => o.id === p.origin_origins);
       return origin?.name || "请选择产地";
     };
 
     // 选择图片
-    const handleChooseImage = () => {
+    const handleChooseImage = (idx: number) => {
       uni.chooseImage({
         count: 1,
         sizeType: ["compressed"],
         sourceType: ["album", "camera"],
         success: async (res) => {
           const tempFilePath = res.tempFilePaths[0];
-          await uploadImage(tempFilePath);
+          await uploadImage(idx, tempFilePath);
         },
         fail: (error) => {
           console.error("选择图片失败:", error);
@@ -529,8 +630,8 @@ export default {
     };
 
     // 上传图片（使用七牛云直传）
-    const uploadImage = async (filePath: string) => {
-      uploading.value = true;
+    const uploadImage = async (idx: number, filePath: string) => {
+      uploadingIndex.value = idx;
       try {
         // 使用七牛云直传
         const { url } = await uploadToQiniu(filePath, (progress) => {
@@ -538,7 +639,9 @@ export default {
           console.log("上传进度:", progress + "%");
         });
 
-        form.value.image_url = url;
+        if (idx >= 0 && idx < products.value.length) {
+          products.value[idx].image_url = url;
+        }
         uni.showToast({
           title: "上传成功",
           icon: "success",
@@ -550,28 +653,31 @@ export default {
           icon: "none",
         });
       } finally {
-        uploading.value = false;
+        uploadingIndex.value = -1;
       }
     };
 
     // 预览图片
-    const handlePreviewImage = () => {
-      if (form.value.image_url) {
+    const handlePreviewImage = (idx: number) => {
+      const p = products.value[idx];
+      if (p?.image_url) {
         uni.previewImage({
-          urls: [form.value.image_url],
-          current: form.value.image_url,
+          urls: [p.image_url],
+          current: p.image_url,
         });
       }
     };
 
     // 删除图片
-    const handleDeleteImage = () => {
+    const handleDeleteImage = (idx: number) => {
       uni.showModal({
         title: "确认删除",
         content: "确定要删除这张图片吗？",
         success: (res) => {
           if (res.confirm) {
-            form.value.image_url = "";
+            if (idx >= 0 && idx < products.value.length) {
+              products.value[idx].image_url = "";
+            }
           }
         },
       });
@@ -588,13 +694,17 @@ export default {
 
     return {
       selectedBatch,
-      form,
+      products,
       submitting,
-      uploading,
+      uploadingIndex,
+      submitText,
       categories,
       origins,
+      commonDetail,
       formatTime,
       handleSelectBatch,
+      handleAddProduct,
+      handleRemoveProduct,
       handleSelectCategory,
       handleSelectOrigin,
       getSelectedCategoryName,
@@ -819,6 +929,15 @@ export default {
   color: #999;
 }
 
+.detail-tip {
+  margin-top: 10rpx;
+}
+
+.detail-tip-text {
+  font-size: 24rpx;
+  color: #999;
+}
+
 .submit-section {
   padding: 40rpx;
   margin-top: 40rpx;
@@ -849,6 +968,61 @@ export default {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 24rpx;
+}
+
+.add-product-btn {
+  padding: 10rpx 18rpx;
+  background: linear-gradient(135deg, #3cc51f 0%, #2ea517 100%);
+  border-radius: 20rpx;
+}
+
+.add-product-btn.disabled {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.add-product-btn-text {
+  font-size: 24rpx;
+  color: #fff;
+  font-weight: 500;
+}
+
+.product-form-card {
+  background-color: #f9f9f9;
+  border: 1rpx solid #e0e0e0;
+  border-radius: 12rpx;
+  padding: 24rpx;
+  margin-bottom: 24rpx;
+}
+
+.product-form-card:last-child {
+  margin-bottom: 0;
+}
+
+.product-form-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20rpx;
+}
+
+.product-form-card-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #333;
+}
+
+.product-form-card-remove {
+  padding: 6rpx 14rpx;
+  border-radius: 16rpx;
+  background-color: rgba(255, 59, 48, 0.1);
+  color: #ff3b30;
+  font-size: 24rpx;
+}
+
+.product-form-card-remove.disabled {
+  opacity: 0.6;
+  pointer-events: none;
 }
 
 .batch-info-badge {

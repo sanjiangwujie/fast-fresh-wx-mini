@@ -1,6 +1,5 @@
 import client from "@/config-lib/hasura-graphql-client/hasura-graphql-client";
 import type { Users, User_Roles } from "@/types/graphql";
-import cacheStore from "@/config-lib/cache-store/cache-store";
 import { API_BASE_URL } from "@/project-config";
 
 /**
@@ -8,36 +7,29 @@ import { API_BASE_URL } from "@/project-config";
  * @param userId 用户ID
  * @returns 用户信息
  */
-export const getUser = cacheStore.cache(
-  async (userId: string | number): Promise<Users | null> => {
-    const query = `
-      query GetUser($id: bigint!) {
-        users_by_pk(id: $id) {
-          id
-          phone
-          nickname
-          avatar_url
-          created_at
-          updated_at
-        }
+export const getUser = async (userId: string | number): Promise<Users | null> => {
+  const query = `
+    query GetUser($id: bigint!) {
+      users_by_pk(id: $id) {
+        id
+        phone
+        nickname
+        avatar_url
+        created_at
+        updated_at
       }
-    `;
+    }
+  `;
 
-    const result = await client.execute<{ users_by_pk: Users | null }>({
-      query,
-      variables: {
-        id: Number(userId),
-      },
-    });
+  const result = await client.execute<{ users_by_pk: Users | null }>({
+    query,
+    variables: {
+      id: Number(userId),
+    },
+  });
 
-    return result.users_by_pk || null;
-  },
-  {
-    duration: 1000 * 60 * 5, // 缓存5分钟
-    useCache: true,
-    forceRefresh: false,
-  }
-);
+  return result.users_by_pk || null;
+};
 
 /**
  * 获取用户的角色列表（内部实现，不缓存）
@@ -67,18 +59,13 @@ const _getUserRolesInternal = async (userId: string | number): Promise<User_Role
 };
 
 /**
- * 获取用户的角色列表（带缓存）
+ * 获取用户的角色列表
  * @param userId 用户ID
  * @returns 用户角色列表
  */
-export const getUserRoles = cacheStore.cache(
-  _getUserRolesInternal,
-  {
-    duration: 1000 * 60 * 5, // 缓存5分钟
-    useCache: true,
-    forceRefresh: false,
-  }
-);
+export const getUserRoles = async (userId: string | number): Promise<User_Roles[]> => {
+  return await _getUserRolesInternal(userId);
+};
 
 /**
  * 获取用户的角色列表（强制刷新，不使用缓存）

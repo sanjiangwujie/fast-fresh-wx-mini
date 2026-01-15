@@ -169,7 +169,7 @@ import { ref, computed, onMounted } from "vue";
 import { onLoad, onShareAppMessage } from "@dcloudio/uni-app";
 import { getOrderById, updateOrderPaymentVoucher, confirmOrder } from "@/api/order";
 import { getUserRoles } from "@/api/user";
-import { getUserId, isLoggedIn } from "@/api/auth";
+import { getUserId, isLoggedIn, getUserRoles as getStoredUserRoles } from "@/api/auth";
 import { uploadToQiniu } from "@/api/upload";
 import type { Orders } from "@/types/graphql";
 
@@ -236,7 +236,7 @@ export default {
       }
     };
 
-    // 检查用户是否是运营人员
+    // 检查用户是否是运营人员（优化：优先使用本地存储，减少网络请求）
     const checkOperatorRole = async () => {
       if (!isLoggedIn()) {
         isOperator.value = false;
@@ -244,6 +244,15 @@ export default {
       }
 
       try {
+        // 优先从本地存储获取角色信息（登录时已保存）
+        const storedRoles = getStoredUserRoles();
+        if (Array.isArray(storedRoles) && storedRoles.length > 0) {
+          isOperator.value = storedRoles.some((role) => role.role_type === "operator");
+          // 如果本地有角色信息，直接返回，不需要网络请求
+          return;
+        }
+
+        // 如果本地没有角色信息，才从服务器获取
         const userId = getUserId();
         if (userId) {
           const roles = await getUserRoles(userId);

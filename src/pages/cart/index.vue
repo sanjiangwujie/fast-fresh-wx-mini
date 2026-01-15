@@ -89,7 +89,7 @@
 <script lang="ts">
 import { ref, computed, onMounted } from "vue";
 import { onLoad, onShow } from "@dcloudio/uni-app";
-import { getCarts, deleteCart, deleteCarts, updateCartQuantity } from "@/api/cart";
+import { getCarts, deleteCart, deleteCarts, updateCartQuantity, updateCartSelection, updateCartsSelection } from "@/api/cart";
 import { getUserId, isLoggedIn } from "@/api/auth";
 import type { Carts } from "@/types/graphql";
 
@@ -177,10 +177,9 @@ export default {
           is_manage_selected: false,
         }));
         
-        // 检查并修正每个商品的数量（如果大于库存）
-        for (const item of cartItems.value) {
-          await checkAndFixQuantity(item);
-        }
+        // 检查并修正每个商品的数量（如果大于库存）- 并行处理以提高性能
+        const fixPromises = cartItems.value.map((item) => checkAndFixQuantity(item));
+        await Promise.allSettled(fixPromises);
       } catch (error) {
         console.error("加载购物车失败:", error);
         uni.showToast({
@@ -193,24 +192,54 @@ export default {
     };
 
     // 切换选中状态
-    const handleToggleSelect = (item: CartItemWithManage, isManage: boolean) => {
+    const handleToggleSelect = async (item: CartItemWithManage, isManage: boolean) => {
       if (isManage) {
-        // 管理模式：切换管理选中状态
+        // 管理模式：切换管理选中状态（本地状态，不需要同步）
         item.is_manage_selected = !item.is_manage_selected;
       } else {
-        // 正常模式：切换结算选中状态
-        // TODO: 调用API更新选中状态
-        item.is_selected = !item.is_selected;
+        // 正常模式：切换结算选中状态，同步到后端
+        const newSelected = !item.is_selected;
+        item.is_selected = newSelected; // 乐观更新
+        
+        try {
+          await updateCartSelection(item.id, newSelected);
+        } catch (error) {
+          // 如果更新失败，回滚状态
+          item.is_selected = !newSelected;
+          console.error("更新选中状态失败:", error);
+          uni.showToast({
+            title: "更新失败，请重试",
+            icon: "none",
+          });
+        }
       }
     };
 
     // 全选/取消全选
-    const handleToggleAll = () => {
+    const handleToggleAll = async () => {
       const allSelected = isAllSelected.value;
-      // TODO: 调用API批量更新选中状态
+      const newSelected = !allSelected;
+      
+      // 乐观更新
       cartItems.value.forEach((item) => {
-        item.is_selected = !allSelected;
+        item.is_selected = newSelected;
       });
+      
+      // 同步到后端
+      try {
+        const cartIds = cartItems.value.map((item) => item.id);
+        await updateCartsSelection(cartIds, newSelected);
+      } catch (error) {
+        // 如果更新失败，回滚状态
+        cartItems.value.forEach((item) => {
+          item.is_selected = allSelected;
+        });
+        console.error("批量更新选中状态失败:", error);
+        uni.showToast({
+          title: "更新失败，请重试",
+          icon: "none",
+        });
+      }
     };
 
     // 减少数量

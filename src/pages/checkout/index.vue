@@ -112,6 +112,7 @@ import { getCarts } from "@/api/cart";
 import { createOrder } from "@/api/order";
 import { getAddresses } from "@/api/address";
 import { getUserId, getUserInfo, isLoggedIn } from "@/api/auth";
+import { deleteCarts } from "@/api/cart";
 import type { Carts, Addresses } from "@/types/graphql";
 
 interface DeliveryAddress {
@@ -312,6 +313,17 @@ export default {
             url: `/pages/order-payment/index?id=${order?.id}`,
           });
         }, 1500);
+
+        // 下单成功后，移除本次下单对应的购物车项
+        // 注意：即使删除失败也不影响支付流程
+        try {
+          const cartIds = cartItems.value.map((i) => i.id).filter(Boolean) as any[];
+          if (cartIds.length > 0) {
+            await deleteCarts(cartIds);
+          }
+        } catch (e) {
+          console.warn("[下单] 删除购物车项失败（忽略）:", e);
+        }
       } catch (error) {
         console.error("提交订单失败:", error);
         uni.showToast({
@@ -583,14 +595,16 @@ export default {
 /* 订单备注 */
 .remark-input {
   width: 100%;
-  min-height: 120rpx;
-  padding: 20rpx;
+  height: 88rpx;
+  min-height: 88rpx;
+  padding: 16rpx 20rpx;
   background-color: #f9f9f9;
   border-radius: 12rpx;
   border: 1rpx solid #eee;
   font-size: 28rpx;
   color: #333;
   box-sizing: border-box;
+  line-height: 1.5;
 }
 
 /* 价格明细 */

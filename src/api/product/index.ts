@@ -6,66 +6,71 @@ import type {
   Product_Price_History,
   Product_Price_History_Order_By
 } from "@/types/graphql";
-import cacheStore from "@/config-lib/cache-store/cache-store";
 
 /**
  * 获取产品列表
  * @param args 查询参数
  * @returns 产品列表
  */
-export const getProducts = cacheStore.cache(
-  async (args: {
-    where?: Products_Bool_Exp;
-    order_by?: Products_Order_By[];
-    limit?: number;
-    offset?: number;
-    includeDeleted?: boolean; // 是否包含已删除的商品（管理员查看时使用）
-  } = {}): Promise<Products[]> => {
-    // 构建where条件：默认过滤已删除的商品
-    const whereCondition: Products_Bool_Exp = {
-      ...args.where,
-      ...(args.includeDeleted ? {} : { is_deleted: { _eq: false } }),
-    };
+export const getProducts = async (args: {
+  where?: Products_Bool_Exp;
+  order_by?: Products_Order_By[];
+  limit?: number;
+  offset?: number;
+  includeDeleted?: boolean; // 是否包含已删除的商品（管理员查看时使用）
+} = {}): Promise<Products[]> => {
+  // 构建where条件：默认过滤已删除的商品
+  const whereCondition: Products_Bool_Exp = {
+    ...args.where,
+    ...(args.includeDeleted ? {} : { is_deleted: { _eq: false } }),
+  };
 
-    const query = `
-      query GetProducts($where: products_bool_exp, $order_by: [products_order_by!], $limit: Int, $offset: Int) {
-        products(where: $where, order_by: $order_by, limit: $limit, offset: $offset) {
+  const query = `
+    query GetProducts($where: products_bool_exp, $order_by: [products_order_by!], $limit: Int, $offset: Int) {
+      products(where: $where, order_by: $order_by, limit: $limit, offset: $offset) {
+        id
+        name
+        image_url
+        unit_price
+        unit_stock
+        unit
+        retail_unit
+        gross_weight
+        net_weight
+        sales
+        batch_batches
+        category_categories
+        origin_origins
+        category {
           id
           name
-          image_url
-          unit_price
-          unit_stock
-          unit
-          sales
-          batch_batches
-          category_categories
-          origin_origins
-          is_off_shelf
-          is_deleted
-          created_at
-          updated_at
+          category_name
         }
+        origin {
+          id
+          name
+          category_name
+        }
+        is_off_shelf
+        is_deleted
+        created_at
+        updated_at
       }
-    `;
+    }
+  `;
 
-    const result = await client.execute<{ products: Products[] }>({
-      query,
-      variables: {
-        where: whereCondition,
-        order_by: args.order_by || undefined,
-        limit: args.limit || 20,
-        offset: args.offset || 0,
-      },
-    });
+  const result = await client.execute<{ products: Products[] }>({
+    query,
+    variables: {
+      where: whereCondition,
+      order_by: args.order_by || undefined,
+      limit: args.limit || 20,
+      offset: args.offset || 0,
+    },
+  });
 
-    return result.products || [];
-  },
-  {
-    duration: 1000 * 3, // 缓存3秒
-    useCache: true,
-    forceRefresh: false,
-  }
-);
+  return result.products || [];
+};
 
 /**
  * 搜索商品（根据名称模糊搜索）
@@ -96,10 +101,23 @@ export const searchProducts = async (
         unit_price
         unit_stock
         unit
+        retail_unit
+        gross_weight
+        net_weight
         sales
         batch_batches
         category_categories
         origin_origins
+        category {
+          id
+          name
+          category_name
+        }
+        origin {
+          id
+          name
+          category_name
+        }
         is_off_shelf
         is_deleted
         created_at
@@ -125,8 +143,7 @@ export const searchProducts = async (
  * @param id 产品ID
  * @returns 产品
  */
-export const getProductById = cacheStore.cache(
-  async (id: string | number): Promise<Products | null> => {
+export const getProductById = async (id: string | number): Promise<Products | null> => {
     const query = `
       query GetProductById($id: bigint!) {
         products_by_pk(id: $id) {
@@ -191,13 +208,7 @@ export const getProductById = cacheStore.cache(
     });
 
     return result.products_by_pk || null;
-  },
-  {
-    duration: 1000 * 3, // 缓存3秒
-    useCache: true,
-    forceRefresh: false,
-  }
-);
+};
 
 /**
  * 价格历史记录接口
@@ -233,12 +244,11 @@ export interface PriceForecast {
  * @param limit 限制返回数量，默认不限制
  * @returns 价格历史记录列表
  */
-export const getProductPriceHistory = cacheStore.cache(
-  async (
-    productId: string | number,
-    days: number = 7,
-    limit?: number
-  ): Promise<PriceHistoryItem[]> => {
+export const getProductPriceHistory = async (
+  productId: string | number,
+  days: number = 7,
+  limit?: number
+): Promise<PriceHistoryItem[]> => {
     // 如果指定了天数，计算日期范围
     let daysAgoISO: string | undefined;
     if (days > 0) {
@@ -315,13 +325,7 @@ export const getProductPriceHistory = cacheStore.cache(
     
     // 反转数组，使其按时间正序排列（旧到新）
     return history.reverse();
-  },
-  {
-    duration: 1000 * 60 * 5, // 缓存5分钟
-    useCache: true,
-    forceRefresh: false,
-  }
-);
+};
 
 /**
  * 获取产品所有价格变动历史
@@ -329,11 +333,10 @@ export const getProductPriceHistory = cacheStore.cache(
  * @param limit 限制返回数量，默认200条（支持一天多次变动）
  * @returns 价格历史记录列表（按时间倒序）
  */
-export const getAllProductPriceHistory = cacheStore.cache(
-  async (
-    productId: string | number,
-    limit: number = 200
-  ): Promise<PriceHistoryItem[]> => {
+export const getAllProductPriceHistory = async (
+  productId: string | number,
+  limit: number = 200
+): Promise<PriceHistoryItem[]> => {
     try {
       const query = `
         query GetAllProductPriceHistory($productId: bigint!, $limit: Int) {
@@ -382,13 +385,7 @@ export const getAllProductPriceHistory = cacheStore.cache(
       console.error("[价格历史] 查询失败:", error);
       throw error;
     }
-  },
-  {
-    duration: 1000 * 60 * 5, // 缓存5分钟
-    useCache: true,
-    forceRefresh: false,
-  }
-);
+};
 
 /**
  * 计算价格趋势
@@ -558,8 +555,7 @@ function predictFuturePrice(priceHistory: PriceHistoryItem[]): {
  * @param productId 产品ID
  * @returns 行情预测结果
  */
-export const getProductPriceForecast = cacheStore.cache(
-  async (productId: string | number): Promise<PriceForecast> => {
+export const getProductPriceForecast = async (productId: string | number): Promise<PriceForecast> => {
     const priceHistory = await getProductPriceHistory(productId, 30); // 获取30天数据用于预测
     
     if (priceHistory.length === 0) {
@@ -600,13 +596,7 @@ export const getProductPriceForecast = cacheStore.cache(
       },
       history: sortedHistory.slice(-7), // 返回最近7天的数据用于图表展示（按时间正序）
     };
-  },
-  {
-    duration: 1000 * 60 * 5, // 缓存5分钟
-    useCache: true,
-    forceRefresh: false,
-  }
-);
+};
 
 /**
  * 创建商品（operator 使用）
@@ -763,7 +753,6 @@ export const updateProduct = async (
     image_url?: string | null;
     unit_price?: number | null;
     unit_stock?: number | null;
-    unit?: string | null;
     category_categories?: string | number | null;
     origin_origins?: string | number | null;
     gross_weight?: number;
@@ -793,7 +782,6 @@ export const updateProduct = async (
       $image_url: String
       $unit_price: numeric
       $unit_stock: bigint
-      $unit: String
       $category_categories: bigint
       $origin_origins: bigint
       $gross_weight: numeric
@@ -809,7 +797,6 @@ export const updateProduct = async (
           image_url: $image_url
           unit_price: $unit_price
           unit_stock: $unit_stock
-          unit: $unit
           category_categories: $category_categories
           origin_origins: $origin_origins
           gross_weight: $gross_weight
@@ -845,8 +832,6 @@ export const updateProduct = async (
   if (params.image_url !== undefined) setData.image_url = params.image_url;
   if (params.unit_price !== undefined) setData.unit_price = params.unit_price;
   if (params.unit_stock !== undefined) setData.unit_stock = params.unit_stock;
-  // 注意：unit 不应该被更新，因为价格单位不能修改
-  // if (params.unit !== undefined) setData.unit = params.unit;
   if (params.category_categories !== undefined) {
     setData.category_categories = params.category_categories ? Number(params.category_categories) : null;
   }

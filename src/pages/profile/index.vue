@@ -22,6 +22,10 @@
         <text class="menu-text">收货地址</text>
         <text class="menu-arrow">›</text>
       </view>
+      <view class="menu-item" @click="handleMenuClick('contact')">
+        <text class="menu-text">联系我们</text>
+        <text class="menu-arrow">›</text>
+      </view>
     </view>
 
     <!-- 果农管理功能 -->
@@ -106,14 +110,17 @@
         </view>
         <text class="menu-arrow">›</text>
       </view>
+      <view class="menu-item" @click="handleMenuClick('payment-settings')">
+        <view class="menu-icon-wrapper">
+          <text class="menu-icon">💰</text>
+          <text class="menu-text">应用设置</text>
+        </view>
+        <text class="menu-arrow">›</text>
+      </view>
     </view>
 
     <!-- 其他功能 -->
     <view class="menu-section">
-      <view class="menu-item" @click="handleMenuClick('settings')">
-        <text class="menu-text">设置</text>
-        <text class="menu-arrow">›</text>
-      </view>
       <view class="menu-item" @click="handleMenuClick('about')">
         <text class="menu-text">关于我们</text>
         <text class="menu-arrow">›</text>
@@ -132,7 +139,7 @@
 <script lang="ts">
 import { ref, computed } from "vue";
 import { onLoad, onShow } from "@dcloudio/uni-app";
-import { getUser, getUserRoles, getUserRolesForceRefresh } from "@/api/user";
+import { getUser, getUserRoles } from "@/api/user";
 import { getUserId, getUserInfo, getUserRoles as getStoredUserRoles, clearLoginInfo, isLoggedIn } from "@/api/auth";
 import type { Users } from "@/types/graphql";
 
@@ -186,10 +193,8 @@ export default {
               try {
                 console.log("[个人中心] 开始加载用户角色, userId:", userId, "forceRefreshRoles:", forceRefreshRoles);
                 
-                // 如果强制刷新，使用不带缓存的版本
-                const roles = forceRefreshRoles 
-                  ? await getUserRolesForceRefresh(userId)
-                  : await getUserRoles(userId);
+                // 获取用户角色（已移除缓存，直接调用）
+                const roles = await getUserRoles(userId);
                 
                 console.log("[个人中心] 获取到的角色数据:", roles);
                 userRoles.value = Array.isArray(roles) ? roles : [];
@@ -263,7 +268,8 @@ export default {
     const handleMenuClick = (type: string) => {
       console.log("[个人中心] 点击菜单:", type);
       
-      if (!isLoggedIn()) {
+      // about / contact 允许未登录访问
+      if (!isLoggedIn() && type !== "about" && type !== "contact") {
         console.log("[个人中心] 未登录，跳转到登录页");
         uni.navigateTo({
           url: "/pages/login/index",
@@ -342,18 +348,19 @@ export default {
             url: "/subPackages/admin/operator-manage/index",
           });
           break;
-        case "settings":
-          // TODO: 跳转到设置页
-          uni.showToast({
-            title: "设置",
-            icon: "none",
+        case "payment-settings":
+          uni.navigateTo({
+            url: "/subPackages/admin/payment-settings/index",
           });
           break;
         case "about":
-          // TODO: 跳转到关于我们页
-          uni.showToast({
-            title: "关于我们",
-            icon: "none",
+          uni.navigateTo({
+            url: "/pages/about/index",
+          });
+          break;
+        case "contact":
+          uni.navigateTo({
+            url: "/pages/contact/index",
           });
           break;
         default:
@@ -516,7 +523,8 @@ export default {
 /* 退出登录 */
 .logout-section {
   margin-top: 40rpx;
-  padding: 0 40rpx;
+  padding: 0 40rpx calc(140rpx + constant(safe-area-inset-bottom));
+  padding: 0 40rpx calc(140rpx + env(safe-area-inset-bottom));
 }
 
 .logout-btn {

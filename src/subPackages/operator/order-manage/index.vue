@@ -337,6 +337,9 @@ export default {
 
 /* 状态筛选标签 */
 .status-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 100;
   background-color: #fff;
   padding: 20rpx 0;
   border-bottom: 1rpx solid #eee;
@@ -378,6 +381,9 @@ export default {
 
 /* 支付状态二级筛选 */
 .payment-filter {
+  position: sticky;
+  top: 80rpx; /* 状态筛选标签的高度 */
+  z-index: 99;
   background-color: #fff;
   padding: 16rpx 0;
   border-bottom: 1rpx solid #eee;

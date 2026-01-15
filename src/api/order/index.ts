@@ -522,13 +522,14 @@ export const confirmOrder = async (orderId: string | number): Promise<Orders | n
   // 先更新每个商品的库存（减少库存）
   for (const { productId, quantity } of stockUpdates) {
     const stockMutation = `
-      mutation UpdateProductStock($id: bigint!, $quantity: bigint!) {
+      mutation UpdateProductStockAndSales($id: bigint!, $stock_delta: bigint!, $sales_delta: bigint!) {
         update_products_by_pk(
           pk_columns: { id: $id }
-          _inc: { unit_stock: $quantity }
+          _inc: { unit_stock: $stock_delta, sales: $sales_delta }
         ) {
           id
           unit_stock
+          sales
         }
       }
     `;
@@ -538,7 +539,8 @@ export const confirmOrder = async (orderId: string | number): Promise<Orders | n
       query: stockMutation,
       variables: {
         id: productId,
-        quantity: -quantity, // 负数表示减少
+        stock_delta: -quantity, // 负数表示减少库存
+        sales_delta: quantity, // 正数表示增加销量
       },
     });
   }

@@ -38,6 +38,15 @@
       </view>
     </view>
 
+    <!-- 行情入口 -->
+    <view class="market-entry" @click="handleMarketClick">
+      <view class="market-left">
+        <text class="market-title">实时行情</text>
+        <text class="market-desc">一览平台在售商品价格，支持分享/保存</text>
+      </view>
+      <text class="market-arrow">›</text>
+    </view>
+
     <!-- 商品列表（双列表瀑布流） -->
     <view class="products-section">
       <view class="products-title">热门商品</view>
@@ -330,6 +339,12 @@ export default {
       });
     };
 
+    const handleMarketClick = () => {
+      uni.navigateTo({
+        url: "/pages/market/index",
+      });
+    };
+
     onLoad(() => {
       loadBanners();
       loadKingkongItems();
@@ -355,6 +370,7 @@ export default {
       handleKingkongClick,
       handleProductClick,
       handleSearchClick,
+      handleMarketClick,
     };
   },
 };
@@ -431,6 +447,38 @@ export default {
 .kingkong-text {
   font-size: 24rpx;
   color: #333;
+}
+
+.market-entry {
+  margin-bottom: 20rpx;
+  background: linear-gradient(135deg, rgba(60, 197, 31, 0.12) 0%, rgba(212, 35, 122, 0.10) 100%);
+  border-radius: 16rpx;
+  padding: 24rpx 24rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.market-left {
+  display: flex;
+  flex-direction: column;
+}
+
+.market-title {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #222;
+}
+
+.market-desc {
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  color: #666;
+}
+
+.market-arrow {
+  font-size: 32rpx;
+  color: rgba(0, 0, 0, 0.35);
 }
 
 /* 商品列表 */

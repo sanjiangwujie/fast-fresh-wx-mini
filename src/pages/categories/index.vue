@@ -107,7 +107,7 @@
 
 <script lang="ts">
 import { ref, computed, onMounted, watch } from "vue";
-import { onLoad } from "@dcloudio/uni-app";
+import { onLoad, onShow } from "@dcloudio/uni-app";
 import { getProducts } from "@/api/product";
 import { getCategories, getCategoryNames } from "@/api/category";
 import type { Products, Categories, Products_Bool_Exp } from "@/types/graphql";
@@ -359,6 +359,16 @@ export default {
         loadCategoryNames();
         loadCategories();
         loadProducts(true);
+      }
+    });
+
+    // tabBar 页面二次进入时 onLoad 不会再触发（例如从首页金刚区 switchTab 过来）
+    // 这里在 onShow 再读取一次参数，避免“第一次正常、第二次失效”的问题
+    onShow(() => {
+      const categoryName = uni.getStorageSync("category_name_param");
+      if (categoryName) {
+        uni.removeStorageSync("category_name_param");
+        selectCategoryByName(decodeURIComponent(categoryName));
       }
     });
 

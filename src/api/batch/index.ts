@@ -59,11 +59,13 @@ export const getBatches = async (
             phone
           }
         }
-        product {
+        products(limit: 1) {
           id
-          name
-          image_url
-          unit_price
+        }
+        products_aggregate {
+          aggregate {
+            count
+          }
         }
       }
     }
@@ -104,7 +106,10 @@ export const getBatchesWithoutProduct = async (
   });
   
   // 过滤掉已有 product 的批次
-  return allBatches.filter((batch) => !batch.product || !batch.product.id);
+  return allBatches.filter((batch: any) => {
+    const products = (batch as any).products;
+    return !Array.isArray(products) || products.length === 0;
+  });
 };
 
 /**
@@ -136,11 +141,18 @@ export const getBatchById = async (batchId: string | number): Promise<Batches | 
             phone
           }
         }
-        product {
+        products {
           id
           name
           image_url
           unit_price
+          created_at
+          updated_at
+        }
+        products_aggregate {
+          aggregate {
+            count
+          }
         }
       }
     }

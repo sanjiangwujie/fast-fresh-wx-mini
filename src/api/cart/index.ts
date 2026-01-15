@@ -264,3 +264,91 @@ export const updateCartQuantity = async (
     throw error;
   }
 };
+
+/**
+ * 更新购物车项选中状态
+ * @param cartId 购物车项ID
+ * @param isSelected 是否选中
+ * @returns 更新后的购物车项
+ */
+export const updateCartSelection = async (
+  cartId: string | number,
+  isSelected: boolean
+): Promise<Carts | null> => {
+  const mutation = `
+    mutation UpdateCartSelection($id: bigint!, $is_selected: Boolean!) {
+      update_carts_by_pk(
+        pk_columns: { id: $id }
+        _set: { is_selected: $is_selected }
+      ) {
+        id
+        product_products
+        quantity
+        is_selected
+        created_at
+        updated_at
+        product {
+          id
+          name
+          image_url
+          unit_price
+          unit_stock
+          unit
+          sales
+          is_off_shelf
+          is_deleted
+        }
+      }
+    }
+  `;
+
+  try {
+    const result = await client.execute<{ update_carts_by_pk: Carts | null }>({
+      query: mutation,
+      variables: {
+        id: Number(cartId),
+        is_selected: isSelected,
+      },
+    });
+    return result.update_carts_by_pk || null;
+  } catch (error) {
+    console.error("更新购物车选中状态失败:", error);
+    throw error;
+  }
+};
+
+/**
+ * 批量更新购物车项选中状态
+ * @param cartIds 购物车项ID数组
+ * @param isSelected 是否选中
+ * @returns 更新的数量
+ */
+export const updateCartsSelection = async (
+  cartIds: (string | number)[],
+  isSelected: boolean
+): Promise<number> => {
+  const mutation = `
+    mutation UpdateCartsSelection($ids: [bigint!]!, $is_selected: Boolean!) {
+      update_carts(
+        where: { id: { _in: $ids } }
+        _set: { is_selected: $is_selected }
+      ) {
+        affected_rows
+      }
+    }
+  `;
+
+  try {
+    const result = await client.execute<{ update_carts: { affected_rows: number } }>({
+      query: mutation,
+      variables: {
+        ids: cartIds.map((id) => Number(id)),
+        is_selected: isSelected,
+      },
+    });
+    return result.update_carts.affected_rows;
+  } catch (error) {
+    console.error("批量更新购物车选中状态失败:", error);
+    throw error;
+  }
+};

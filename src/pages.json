@@ -78,6 +78,25 @@
 			"style": {
 				"navigationBarTitleText": "编辑收货地址"
 			}
+		},
+		{
+			"path": "pages/about/index",
+			"style": {
+				"navigationBarTitleText": "关于我们"
+			}
+		},
+		{
+			"path": "pages/contact/index",
+			"style": {
+				"navigationBarTitleText": "联系我们"
+			}
+		},
+		{
+			"path": "pages/market/index",
+			"style": {
+				"navigationBarTitleText": "实时行情",
+				"enablePullDownRefresh": true
+			}
 		}
 	],
 	"subPackages": [
@@ -187,6 +206,12 @@
 					"path": "operator-manage/index",
 					"style": {
 						"navigationBarTitleText": "运营账号管理"
+					}
+				},
+				{
+					"path": "payment-settings/index",
+					"style": {
+						"navigationBarTitleText": "应用设置"
 					}
 				}
 			]

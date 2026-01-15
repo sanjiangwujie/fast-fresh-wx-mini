@@ -27,10 +27,10 @@
               <text class="item-sort">排序: {{ item.sort }}</text>
               <text class="item-link" v-if="item.link_url">{{ item.link_url }}</text>
             </view>
-            <text class="item-arrow">›</text>
-          </view>
-          <view class="item-actions">
-            <button class="action-btn" @click.stop="handleDelete(item.id)">删除</button>
+            <view class="item-right">
+              <view class="delete-btn" @click.stop="handleDelete(item.id)">删除</view>
+              <text class="item-arrow">›</text>
+            </view>
           </view>
         </view>
       </view>
@@ -351,18 +351,24 @@ export default {
   color: #999;
 }
 
-.item-actions {
-  padding: 0 40rpx 20rpx;
+.item-right {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
 }
 
-.action-btn {
-  width: 100%;
-  padding: 20rpx;
-  background-color: #ff6b35;
-  color: #fff;
-  border-radius: 8rpx;
-  font-size: 28rpx;
-  border: none;
+.delete-btn {
+  height: 56rpx;
+  padding: 0 18rpx;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  background-color: #fff1f0;
+  color: #cf1322;
+  border-radius: 999rpx;
+  font-size: 24rpx;
+  border: 1rpx solid #ffccc7;
 }
 
 .modal {
