@@ -16,6 +16,7 @@
           />
         </view>
 
+        
         <view class="form-item">
           <text class="form-label">联系电话 <text class="required">*</text></text>
           <input 
@@ -210,7 +211,7 @@ export default {
     };
 
     onLoad((options) => {
-      if (options.id) {
+      if (options?.id) {
         addressId.value = options.id;
         loadAddress();
       }
